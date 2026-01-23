@@ -13,18 +13,16 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
 
 export function SortSelect({ value, onChange }: SortSelectProps) {
   return (
-    <div className="px-4 py-2">
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value as SortOption)}
-        className="w-full rounded-xl border-2 border-border bg-white px-4 py-3 text-lg text-text focus:border-primary focus:outline-none"
-      >
-        {SORT_OPTIONS.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </div>
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value as SortOption)}
+      className="w-full px-3 py-2 text-base font-medium rounded-lg border border-border bg-white text-text cursor-pointer hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary/30"
+    >
+      {SORT_OPTIONS.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
+    </select>
   );
 }

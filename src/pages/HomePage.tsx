@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import type { Place, Tab, SortOption } from '../types';
 import { getPlaces, getTabs } from '../lib/storage';
 import { Header } from '../components/layout/Header';
-import { Button, TabBar, Loading } from '../components/ui';
+import { Button, Loading } from '../components/ui';
 import { PlaceCard } from '../components/PlaceCard';
 import { SortSelect } from '../components/SortSelect';
 
@@ -111,17 +111,27 @@ export function HomePage() {
             <h2 className="text-base font-bold text-text">登録した場所</h2>
           </div>
 
-          {/* Tab Bar */}
-          <div className="border-b border-border">
-            <TabBar tabs={tabs} activeTabId={activeTabId} onTabChange={setActiveTabId} />
-          </div>
-
-          {/* Sort Select (only for "all" tab) */}
-          {activeTabId === 'all' && (
-            <div className="border-b border-border">
+          {/* Category and Sort Selects */}
+          <div className="px-4 py-3 border-b border-border flex gap-3">
+            {/* Category Dropdown */}
+            <div className="flex-1">
+              <select
+                value={activeTabId}
+                onChange={(e) => setActiveTabId(e.target.value)}
+                className="w-full px-3 py-2 text-base font-medium rounded-lg border border-border bg-white text-text cursor-pointer hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary/30"
+              >
+                {tabs.map((tab) => (
+                  <option key={tab.id} value={tab.id}>
+                    {tab.id === activeTabId ? `表示: ${tab.name}` : tab.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {/* Sort Select */}
+            <div className="flex-1">
               <SortSelect value={sortOption} onChange={setSortOption} />
             </div>
-          )}
+          </div>
 
           {/* Place Cards */}
           <div className="flex-1 p-3 overflow-y-auto">

@@ -1,5 +1,4 @@
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Button } from '../ui/Button';
 
 interface HeaderProps {
   title: string;
@@ -22,26 +21,23 @@ export function Header({ title, showBack, showHome, rightAction }: HeaderProps) 
       <div className="flex items-center justify-between px-4 py-3">
         <div className="flex items-center gap-2">
           {showBack && !isHome && (
-            <Button
-              variant="ghost"
+            <button
               onClick={() => navigate(-1)}
-              className="!p-2 !min-h-0"
+              className="flex items-center gap-1 px-3 py-2 rounded-lg border border-border bg-white text-primary font-medium hover:bg-gray-50 active:bg-gray-100 transition-colors"
               aria-label="戻る"
             >
-              <span className="text-xl">←</span>
-              <span className="ml-1">戻る</span>
-            </Button>
+              <span className="text-lg">←</span>
+              <span>戻る</span>
+            </button>
           )}
           {showHome && !isHome && (
-            <Button
-              variant="ghost"
+            <button
               onClick={() => navigate('/')}
-              className="!p-2 !min-h-0"
+              className="flex items-center gap-1 px-3 py-2 rounded-lg border border-border bg-white text-text hover:bg-gray-50 active:bg-gray-100 transition-colors"
               aria-label="最初の画面に戻る"
             >
-              <span className="text-xl">🏠</span>
-              <span className="ml-1 hidden sm:inline">最初の画面</span>
-            </Button>
+              <span className="text-lg">🏠</span>
+            </button>
           )}
         </div>
 
@@ -51,10 +47,13 @@ export function Header({ title, showBack, showHome, rightAction }: HeaderProps) 
 
         <div className="flex items-center">
           {rightAction && (
-            <Button variant="ghost" onClick={rightAction.onClick} className="!p-2 !min-h-0">
-              {rightAction.icon && <span className="mr-1">{rightAction.icon}</span>}
-              {rightAction.label}
-            </Button>
+            <button
+              onClick={rightAction.onClick}
+              className="flex items-center gap-1 px-3 py-2 rounded-lg border border-border bg-white text-text font-medium hover:bg-gray-50 active:bg-gray-100 transition-colors"
+            >
+              {rightAction.icon && <span className="text-lg">{rightAction.icon}</span>}
+              <span>{rightAction.label}</span>
+            </button>
           )}
         </div>
       </div>
