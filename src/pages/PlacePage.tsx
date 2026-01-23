@@ -24,6 +24,12 @@ export function PlacePage() {
   const isNew = id === 'new';
   const useCurrentLocation = searchParams.get('useCurrentLocation') === 'true';
 
+  // Pre-filled data from search
+  const prefillName = searchParams.get('name');
+  const prefillAddress = searchParams.get('address');
+  const prefillLat = searchParams.get('lat');
+  const prefillLng = searchParams.get('lng');
+
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -81,13 +87,19 @@ export function PlacePage() {
             'error'
           );
         }
+      } else if (isNew && prefillName && prefillLat && prefillLng) {
+        // Pre-filled from search
+        setName(prefillName);
+        setAddress(prefillAddress || '');
+        setLatitude(parseFloat(prefillLat));
+        setLongitude(parseFloat(prefillLng));
       }
 
       setIsLoading(false);
     };
 
     loadData();
-  }, [id, isNew, useCurrentLocation, navigate, showToast]);
+  }, [id, isNew, useCurrentLocation, prefillName, prefillAddress, prefillLat, prefillLng, navigate, showToast]);
 
   const validate = useCallback(() => {
     const newErrors: { name?: string } = {};
