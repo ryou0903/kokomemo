@@ -104,7 +104,7 @@ export function PlacePage() {
   const validate = useCallback(() => {
     const newErrors: { name?: string } = {};
     if (!name.trim()) {
-      newErrors.name = '場所の名前を入力してください';
+      newErrors.name = '場所の登録名を入力してください';
     }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -161,7 +161,7 @@ export function PlacePage() {
   }
 
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="flex flex-col min-h-screen bg-background">
       <Header
         title={isNew ? '新しい場所を登録' : '場所を編集'}
         showBack
@@ -174,15 +174,14 @@ export function PlacePage() {
             e.preventDefault();
             handleSave();
           }}
-          className="flex flex-col gap-6"
+          className="flex flex-col gap-5"
         >
           <Input
-            label="場所の名前（必須）"
+            label="場所の登録名（必須）"
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="例: 〇〇駅前のコンビニ"
             error={errors.name}
-            autoFocus
           />
 
           <Textarea
@@ -193,7 +192,7 @@ export function PlacePage() {
           />
 
           <div className="flex flex-col gap-2">
-            <p className="text-lg font-bold text-text">カテゴリ</p>
+            <p className="text-base font-bold text-text">カテゴリ</p>
             <div className="flex flex-wrap gap-2">
               {tabs.map((tab) => (
                 <button
@@ -201,11 +200,11 @@ export function PlacePage() {
                   type="button"
                   onClick={() => setTabId(tab.id)}
                   className={`
-                    px-4 py-3 rounded-xl text-lg font-medium transition-all
+                    px-3 py-2 rounded-lg text-sm font-medium transition-all
                     ${
                       tabId === tab.id
                         ? 'bg-primary text-white'
-                        : 'bg-white text-text border-2 border-border hover:bg-gray-50'
+                        : 'bg-white text-text border border-border hover:bg-gray-50'
                     }
                   `}
                 >
@@ -217,40 +216,38 @@ export function PlacePage() {
 
           {address && (
             <div className="flex flex-col gap-2">
-              <p className="text-lg font-bold text-text">住所</p>
-              <p className="text-base text-text-secondary bg-gray-50 rounded-xl px-4 py-3">
+              <p className="text-base font-bold text-text">住所</p>
+              <p className="text-sm text-text-secondary bg-gray-50 rounded-lg px-3 py-2">
                 {address}
               </p>
             </div>
           )}
 
-          <div className="mt-4">
+          {/* Action Buttons */}
+          <div className="mt-4 flex gap-3">
+            {!isNew && (
+              <Button
+                type="button"
+                variant="danger"
+                size="normal"
+                icon="🗑️"
+                onClick={() => setShowDeleteDialog(true)}
+                className="flex-none"
+              >
+                削除
+              </Button>
+            )}
             <Button
               type="submit"
               variant="primary"
-              size="large"
+              size="normal"
               icon="💾"
               loading={isSaving}
-              className="w-full"
+              className="flex-1"
             >
               保存する
             </Button>
           </div>
-
-          {!isNew && (
-            <div className="mt-8 pt-8 border-t border-border">
-              <Button
-                type="button"
-                variant="danger"
-                size="large"
-                icon="🗑️"
-                onClick={() => setShowDeleteDialog(true)}
-                className="w-full"
-              >
-                この場所を削除
-              </Button>
-            </div>
-          )}
         </form>
       </main>
 
