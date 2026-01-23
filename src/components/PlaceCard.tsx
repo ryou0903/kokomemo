@@ -20,16 +20,22 @@ export function PlaceCard({ place, onEdit, onNavigate }: PlaceCardProps) {
     openNavigation(place.latitude, place.longitude, settings.travelMode);
   };
 
-  const formattedDate = format(new Date(place.createdAt), 'yyyy年M月d日', { locale: ja });
+  const createdDate = new Date(place.createdAt);
+  const formattedDate = format(createdDate, 'M月d日', { locale: ja });
+  const formattedTime = format(createdDate, 'H:mm', { locale: ja });
 
   return (
     <Card className="flex flex-col gap-2">
       <div className="flex-1">
-        <h3 className="text-base font-bold text-text mb-0.5">{place.name}</h3>
+        <div className="flex justify-between items-start gap-2">
+          <h3 className="text-base font-bold text-text flex-1">{place.name}</h3>
+          <span className="text-xs text-text-secondary whitespace-nowrap">
+            {formattedDate} {formattedTime}
+          </span>
+        </div>
         {place.memo && (
-          <p className="text-sm text-text-secondary line-clamp-2 mb-1">{place.memo}</p>
+          <p className="text-sm text-text-secondary line-clamp-2 mt-1">{place.memo}</p>
         )}
-        <p className="text-xs text-text-secondary/70">{formattedDate} に登録</p>
       </div>
 
       <div className="flex gap-2">

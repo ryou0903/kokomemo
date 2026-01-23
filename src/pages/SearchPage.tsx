@@ -36,10 +36,18 @@ export function SearchPage() {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [selectedPlace, setSelectedPlace] = useState<PlaceResult | null>(null);
 
-  const { isLoaded } = useGoogleMaps({ apiKey: GOOGLE_MAPS_API_KEY });
+  const { isLoaded, loadError } = useGoogleMaps({ apiKey: GOOGLE_MAPS_API_KEY });
   const { getPlacePredictions, getPlaceDetails, isReady } = usePlacesAutocomplete(isLoaded);
 
   const debounceRef = useRef<number | null>(null);
+
+  // Debug: log when services are ready
+  useEffect(() => {
+    if (loadError) {
+      console.error('Google Maps load error:', loadError);
+      showToast('Google Maps APIの読み込みに失敗しました', 'error');
+    }
+  }, [loadError, showToast]);
 
   // Voice input using Web Speech API
   const startVoiceInput = useCallback(() => {
@@ -141,8 +149,15 @@ export function SearchPage() {
 
   // Search for places
   const searchPlaces = useCallback(async (searchQuery: string) => {
-    if (!isReady || !searchQuery.trim()) {
+    if (!searchQuery.trim()) {
       setSuggestions([]);
+      setIsSearching(false);
+      return;
+    }
+
+    if (!isReady) {
+      // Still loading Google Maps API
+      setIsSearching(true);
       return;
     }
 
@@ -157,11 +172,19 @@ export function SearchPage() {
       setSuggestions(placeSuggestions);
     } catch (error) {
       console.error('Place search error:', error);
+      showToast('検索に失敗しました', 'error');
       setSuggestions([]);
     } finally {
       setIsSearching(false);
     }
-  }, [isReady, getPlacePredictions]);
+  }, [isReady, getPlacePredictions, showToast]);
+
+  // Re-search when isReady becomes true
+  useEffect(() => {
+    if (isReady && query.trim() && suggestions.length === 0) {
+      searchPlaces(query);
+    }
+  }, [isReady]);
 
   // Handle input change with debounce
   const handleInputChange = (value: string) => {
@@ -391,9 +414,9 @@ export function SearchPage() {
           </div>
         )}
 
-        {/* Empty State */}
+        {/* Empty State - positioned at top for keyboard visibility */}
         {!isSearching && !selectedPlace && suggestions.length === 0 && query.length === 0 && (
-          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
+          <div className="pt-12 pb-8 px-8 text-center">
             <p className="text-4xl mb-3">🔍</p>
             <p className="text-base text-text-secondary">
               住所や建物の名前を入力して
@@ -403,9 +426,9 @@ export function SearchPage() {
           </div>
         )}
 
-        {/* No Results */}
+        {/* No Results - positioned at top for keyboard visibility */}
         {!isSearching && !selectedPlace && suggestions.length === 0 && query.length > 0 && (
-          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
+          <div className="pt-12 pb-8 px-8 text-center">
             <p className="text-4xl mb-3">🤔</p>
             <p className="text-base text-text-secondary">
               「{query}」に一致する場所が見つかりませんでした
