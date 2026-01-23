@@ -147,17 +147,10 @@ export function SearchPage() {
     }
   }, [query, showToast]);
 
-  // Search for places
+  // Search for places - matching SearchBar implementation
   const searchPlaces = useCallback(async (searchQuery: string) => {
-    if (!searchQuery.trim()) {
+    if (!isReady || !searchQuery.trim()) {
       setSuggestions([]);
-      setIsSearching(false);
-      return;
-    }
-
-    if (!isReady) {
-      // Still loading Google Maps API
-      setIsSearching(true);
       return;
     }
 
@@ -172,19 +165,18 @@ export function SearchPage() {
       setSuggestions(placeSuggestions);
     } catch (error) {
       console.error('Place search error:', error);
-      showToast('検索に失敗しました', 'error');
       setSuggestions([]);
     } finally {
       setIsSearching(false);
     }
-  }, [isReady, getPlacePredictions, showToast]);
+  }, [isReady, getPlacePredictions]);
 
-  // Re-search when isReady becomes true
+  // Re-search when isReady becomes true and there's a pending query
   useEffect(() => {
-    if (isReady && query.trim() && suggestions.length === 0) {
+    if (isReady && query.trim()) {
       searchPlaces(query);
     }
-  }, [isReady]);
+  }, [isReady, query, searchPlaces]);
 
   // Handle input change with debounce
   const handleInputChange = (value: string) => {
