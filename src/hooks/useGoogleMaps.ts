@@ -14,7 +14,9 @@ let isScriptLoading = false;
 let isScriptLoaded = false;
 const loadCallbacks: (() => void)[] = [];
 
-export function useGoogleMaps({ apiKey, libraries = ['places'] }: UseGoogleMapsOptions): UseGoogleMapsResult {
+const DEFAULT_LIBRARIES = ['places'];
+
+export function useGoogleMaps({ apiKey, libraries = DEFAULT_LIBRARIES }: UseGoogleMapsOptions): UseGoogleMapsResult {
   const [isLoaded, setIsLoaded] = useState(isScriptLoaded);
   const [loadError, setLoadError] = useState<Error | null>(null);
 
@@ -23,7 +25,9 @@ export function useGoogleMaps({ apiKey, libraries = ['places'] }: UseGoogleMapsO
       return;
     }
 
-    if (isScriptLoaded) {
+    // Check if already loaded
+    if (isScriptLoaded || window.google?.maps) {
+      isScriptLoaded = true;
       setIsLoaded(true);
       return;
     }
@@ -55,7 +59,7 @@ export function useGoogleMaps({ apiKey, libraries = ['places'] }: UseGoogleMapsO
     };
 
     document.head.appendChild(script);
-  }, [apiKey, libraries]);
+  }, [apiKey]);
 
   return { isLoaded, loadError };
 }

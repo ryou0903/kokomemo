@@ -171,13 +171,6 @@ export function SearchPage() {
     }
   }, [isReady, getPlacePredictions]);
 
-  // Re-search when isReady becomes true and there's a pending query
-  useEffect(() => {
-    if (isReady && query.trim()) {
-      searchPlaces(query);
-    }
-  }, [isReady, query, searchPlaces]);
-
   // Handle input change with debounce
   const handleInputChange = (value: string) => {
     setQuery(value);
@@ -193,6 +186,7 @@ export function SearchPage() {
       }, 300);
     } else {
       setSuggestions([]);
+      setIsSearching(false);
     }
   };
 
