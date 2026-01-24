@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Header } from '../components/layout/Header';
 import { Button, Input } from '../components/ui';
+import { InteractiveMap } from '../components/InteractiveMap';
 import { useGoogleMaps, usePlacesAutocomplete } from '../hooks/useGoogleMaps';
 import { openNavigation } from '../lib/maps';
 import { savePlace, getSettings, addSearchHistory } from '../lib/storage';
@@ -352,16 +353,22 @@ export function SearchPage() {
         {/* Selected Place */}
         {selectedPlace && (
           <div className="flex-1 flex flex-col">
-            {/* Map Preview */}
-            <div className="h-48 bg-gray-200 relative">
+            {/* Interactive Map Preview */}
+            <div className="h-64 bg-gray-200 relative">
               {hasGoogleApi ? (
-                <iframe
-                  title="Map Preview"
-                  width="100%"
-                  height="100%"
-                  style={{ border: 0 }}
-                  loading="lazy"
-                  src={`https://www.google.com/maps/embed/v1/place?key=${GOOGLE_MAPS_API_KEY}&q=${selectedPlace.latitude},${selectedPlace.longitude}&zoom=16`}
+                <InteractiveMap
+                  latitude={selectedPlace.latitude}
+                  longitude={selectedPlace.longitude}
+                  isLoaded={isLoaded}
+                  onLocationChange={(lat, lng, address, name) => {
+                    setSelectedPlace({
+                      ...selectedPlace,
+                      latitude: lat,
+                      longitude: lng,
+                      address: address,
+                      name: name || address.split(',')[0] || selectedPlace.name,
+                    });
+                  }}
                 />
               ) : (
                 <div className="w-full h-full flex items-center justify-center text-text-secondary">

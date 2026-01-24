@@ -19,6 +19,7 @@ export function Header({ title, showBack, showHome, rightAction }: HeaderProps) 
   return (
     <header className="sticky top-0 z-30 bg-surface border-b border-border">
       <div className="flex items-center justify-between px-4 py-3">
+        {/* Left side - Back button only */}
         <div className="flex items-center gap-2">
           {showBack && !isHome && (
             <button
@@ -30,6 +31,14 @@ export function Header({ title, showBack, showHome, rightAction }: HeaderProps) 
               <span>戻る</span>
             </button>
           )}
+        </div>
+
+        <h1 className="text-xl font-bold text-text absolute left-1/2 -translate-x-1/2">
+          {title}
+        </h1>
+
+        {/* Right side - Home button and rightAction */}
+        <div className="flex items-center gap-2">
           {showHome && !isHome && (
             <button
               onClick={() => navigate('/')}
@@ -39,13 +48,6 @@ export function Header({ title, showBack, showHome, rightAction }: HeaderProps) 
               <span className="text-lg">🏠</span>
             </button>
           )}
-        </div>
-
-        <h1 className="text-xl font-bold text-text absolute left-1/2 -translate-x-1/2">
-          {title}
-        </h1>
-
-        <div className="flex items-center">
           {rightAction && (
             <button
               onClick={rightAction.onClick}
