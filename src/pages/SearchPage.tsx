@@ -40,6 +40,22 @@ export function SearchPage() {
   const { getPlacePredictions, getPlaceDetails, isReady } = usePlacesAutocomplete(isLoaded);
 
   const debounceRef = useRef<number | null>(null);
+  const queryRef = useRef(query);
+  const isReadyRef = useRef(isReady);
+  const getPlacePredictionsRef = useRef(getPlacePredictions);
+
+  // Keep refs in sync
+  useEffect(() => {
+    queryRef.current = query;
+  }, [query]);
+
+  useEffect(() => {
+    isReadyRef.current = isReady;
+  }, [isReady]);
+
+  useEffect(() => {
+    getPlacePredictionsRef.current = getPlacePredictions;
+  }, [getPlacePredictions]);
 
   // Debug: log when services are ready
   useEffect(() => {
@@ -147,31 +163,7 @@ export function SearchPage() {
     }
   }, [query, showToast]);
 
-  // Search for places - matching SearchBar implementation
-  const searchPlaces = useCallback(async (searchQuery: string) => {
-    if (!isReady || !searchQuery.trim()) {
-      setSuggestions([]);
-      return;
-    }
-
-    setIsSearching(true);
-    try {
-      const predictions = await getPlacePredictions(searchQuery);
-      const placeSuggestions: Suggestion[] = predictions.map((p) => ({
-        text: p.structured_formatting.main_text,
-        description: p.structured_formatting.secondary_text,
-        placeId: p.place_id,
-      }));
-      setSuggestions(placeSuggestions);
-    } catch (error) {
-      console.error('Place search error:', error);
-      setSuggestions([]);
-    } finally {
-      setIsSearching(false);
-    }
-  }, [isReady, getPlacePredictions]);
-
-  // Handle input change with debounce
+  // Handle input change with debounce - inline search to avoid stale closure
   const handleInputChange = (value: string) => {
     setQuery(value);
     setSelectedPlace(null);
@@ -180,14 +172,38 @@ export function SearchPage() {
       clearTimeout(debounceRef.current);
     }
 
-    if (value.trim()) {
-      debounceRef.current = window.setTimeout(() => {
-        searchPlaces(value);
-      }, 300);
-    } else {
+    if (!value.trim()) {
       setSuggestions([]);
       setIsSearching(false);
+      return;
     }
+
+    setIsSearching(true);
+    debounceRef.current = window.setTimeout(async () => {
+      // Check if API is ready using ref to get latest value
+      if (!isReadyRef.current) {
+        setIsSearching(false);
+        return;
+      }
+
+      try {
+        const predictions = await getPlacePredictionsRef.current(value);
+        // Check if query is still the same (user might have typed more)
+        if (queryRef.current !== value) return;
+
+        const placeSuggestions: Suggestion[] = predictions.map((p) => ({
+          text: p.structured_formatting.main_text,
+          description: p.structured_formatting.secondary_text,
+          placeId: p.place_id,
+        }));
+        setSuggestions(placeSuggestions);
+      } catch (error) {
+        console.error('Place search error:', error);
+        setSuggestions([]);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 300);
   };
 
   // Handle suggestion selection
