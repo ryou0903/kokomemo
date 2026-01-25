@@ -1,6 +1,8 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Input } from './ui';
 import { getSearchHistory, addSearchHistory } from '../lib/storage';
+import { getCurrentLocation, searchNearbyPlaces } from '../lib/maps';
+import type { NearbyPlaceResult } from '../lib/maps';
 import { useGoogleMaps, usePlacesAutocomplete } from '../hooks/useGoogleMaps';
 
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
@@ -18,11 +20,18 @@ interface SearchBarProps {
 }
 
 interface Suggestion {
-  type: 'history' | 'place';
+  type: 'history' | 'place' | 'nearby';
   text: string;
   description?: string;
   placeId?: string;
+  distanceMeters?: number;
 }
+
+// 距離表示用フォーマット関数
+const formatDistance = (meters: number): string => {
+  if (meters < 1000) return `${Math.round(meters)}m`;
+  return `${(meters / 1000).toFixed(1)}km`;
+};
 
 export function SearchBar({ onPlaceSelected }: SearchBarProps) {
   const [query, setQuery] = useState('');
@@ -32,13 +41,20 @@ export function SearchBar({ onPlaceSelected }: SearchBarProps) {
   const [historySuggestions, setHistorySuggestions] = useState<Suggestion[]>([]);
   const [selectedPlace, setSelectedPlace] = useState<PlaceResult | null>(null);
   const [showActionModal, setShowActionModal] = useState(false);
+  const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const debounceRef = useRef<number | null>(null);
 
   const { isLoaded } = useGoogleMaps({ apiKey: GOOGLE_MAPS_API_KEY });
   const { getPlacePredictions, getPlaceDetails, isReady } = usePlacesAutocomplete(isLoaded);
+
+  // マウント時に現在地取得
+  useEffect(() => {
+    getCurrentLocation()
+      .then(loc => setCurrentLocation({ lat: loc.latitude, lng: loc.longitude }))
+      .catch(console.error);
+  }, []);
 
   // Load search history
   useEffect(() => {
@@ -63,49 +79,61 @@ export function SearchBar({ onPlaceSelected }: SearchBarProps) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Search for places when query changes
-  const searchPlaces = useCallback(
-    async (searchQuery: string) => {
-      if (!isReady || !searchQuery.trim()) {
-        setSuggestions([]);
-        return;
-      }
+  // デバウンス付き検索（オートコンプリート + 周辺検索）
+  useEffect(() => {
+    if (!query.trim()) {
+      setSuggestions([]);
+      setIsSearching(false);
+      return;
+    }
 
-      setIsSearching(true);
+    if (!isReady) return;
+
+    setIsSearching(true);
+    const timer = setTimeout(async () => {
       try {
-        const predictions = await getPlacePredictions(searchQuery);
-        const placeSuggestions: Suggestion[] = predictions.map((p) => ({
-          type: 'place' as const,
-          text: p.structured_formatting.main_text,
-          description: p.structured_formatting.secondary_text,
-          placeId: p.place_id,
+        // 1. オートコンプリート取得
+        const predictions = await getPlacePredictions(query, currentLocation || undefined);
+
+        // 2. 周辺検索（現在地がある場合のみ）
+        let nearbyResults: NearbyPlaceResult[] = [];
+        if (currentLocation && GOOGLE_MAPS_API_KEY) {
+          nearbyResults = await searchNearbyPlaces(query, currentLocation, GOOGLE_MAPS_API_KEY);
+        }
+
+        // 3. マージ（周辺検索を優先、重複排除）
+        const nearbyIds = new Set(nearbyResults.map(r => r.placeId));
+        const nearbySuggestions: Suggestion[] = nearbyResults.map(r => ({
+          type: 'nearby' as const,
+          text: r.name,
+          description: r.address,
+          placeId: r.placeId,
+          distanceMeters: r.distanceMeters,
         }));
-        setSuggestions(placeSuggestions);
+        const placeSuggestions: Suggestion[] = predictions
+          .filter(p => !nearbyIds.has(p.place_id))
+          .map(p => ({
+            type: 'place' as const,
+            text: p.structured_formatting.main_text,
+            description: p.structured_formatting.secondary_text,
+            placeId: p.place_id,
+            distanceMeters: p.distance_meters,
+          }));
+
+        setSuggestions([...nearbySuggestions, ...placeSuggestions]);
       } catch (error) {
-        console.error('Place search error:', error);
+        console.error('Search error:', error);
         setSuggestions([]);
       } finally {
         setIsSearching(false);
       }
-    },
-    [isReady, getPlacePredictions]
-  );
+    }, 800);
+
+    return () => clearTimeout(timer);
+  }, [query, currentLocation, isReady, getPlacePredictions]);
 
   const handleInputChange = (value: string) => {
     setQuery(value);
-
-    // Debounce the search
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-    }
-
-    if (value.trim()) {
-      debounceRef.current = window.setTimeout(() => {
-        searchPlaces(value);
-      }, 300);
-    } else {
-      setSuggestions([]);
-    }
   };
 
   const handleSelectSuggestion = async (suggestion: Suggestion) => {
@@ -186,8 +214,10 @@ export function SearchBar({ onPlaceSelected }: SearchBarProps) {
                 onClick={() => handleSelectSuggestion(suggestion)}
                 className="w-full px-4 py-3 text-left text-lg hover:bg-gray-50 border-b border-border last:border-b-0 flex items-center gap-3"
               >
-                <span className="text-xl">
-                  {suggestion.type === 'history' ? '🕐' : '📍'}
+                <span className="text-sm text-primary font-medium min-w-[3.5rem] text-right">
+                  {suggestion.distanceMeters
+                    ? formatDistance(suggestion.distanceMeters)
+                    : suggestion.type === 'history' ? '🕐' : '📍'}
                 </span>
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-text truncate">{suggestion.text}</p>
