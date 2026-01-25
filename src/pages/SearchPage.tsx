@@ -59,19 +59,41 @@ export function SearchPage() {
   const getPlacePredictionsRef = useRef(getPlacePredictions);
   const mapPositionRef = useRef(mapPosition);
 
-  // Get current location on mount
+  // Get current location on mount with timeout fallback
   useEffect(() => {
+    let isMounted = true;
+
+    // すぐにデフォルト位置をセット（ローディング表示を短くする）
+    const timeoutId = setTimeout(() => {
+      if (isMounted && !mapPosition) {
+        setMapPosition(DEFAULT_POSITION);
+        setIsLoadingInitialLocation(false);
+      }
+    }, 3000); // 3秒でタイムアウト
+
     getCurrentLocation()
       .then((loc) => {
-        setMapPosition({ lat: loc.latitude, lng: loc.longitude });
+        if (isMounted) {
+          setMapPosition({ lat: loc.latitude, lng: loc.longitude });
+        }
       })
       .catch(() => {
         // Use default position if location access denied
-        setMapPosition(DEFAULT_POSITION);
+        if (isMounted) {
+          setMapPosition(DEFAULT_POSITION);
+        }
       })
       .finally(() => {
-        setIsLoadingInitialLocation(false);
+        if (isMounted) {
+          clearTimeout(timeoutId);
+          setIsLoadingInitialLocation(false);
+        }
       });
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timeoutId);
+    };
   }, []);
 
   // Keep refs in sync

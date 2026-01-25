@@ -71,12 +71,24 @@ export function getPlaceById(id: string): Place | undefined {
 
 // Tabs
 export function getTabs(): Tab[] {
-  const tabs = safeJsonParse<Tab[]>(STORAGE_KEYS.TABS, []);
-  if (tabs.length === 0) {
+  const storedTabs = safeJsonParse<Tab[]>(STORAGE_KEYS.TABS, []);
+
+  if (storedTabs.length === 0) {
     localStorage.setItem(STORAGE_KEYS.TABS, JSON.stringify(DEFAULT_TABS));
     return DEFAULT_TABS;
   }
-  return tabs;
+
+  // 新しいデフォルトタブを既存データにマージ
+  const existingIds = new Set(storedTabs.map(t => t.id));
+  const newDefaultTabs = DEFAULT_TABS.filter(t => !existingIds.has(t.id));
+
+  if (newDefaultTabs.length > 0) {
+    const mergedTabs = [...storedTabs, ...newDefaultTabs].sort((a, b) => a.order - b.order);
+    localStorage.setItem(STORAGE_KEYS.TABS, JSON.stringify(mergedTabs));
+    return mergedTabs;
+  }
+
+  return storedTabs;
 }
 
 export function getCustomTabs(): Tab[] {
