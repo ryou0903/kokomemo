@@ -223,12 +223,22 @@ export function SearchPage() {
         const predictions = await getPlacePredictionsRef.current(value, origin);
         if (queryRef.current !== value) return;
 
-        const placeSuggestions: Suggestion[] = predictions.map((p) => ({
-          text: p.structured_formatting.main_text,
-          description: p.structured_formatting.secondary_text,
-          placeId: p.place_id,
-          distanceMeters: p.distance_meters,
-        }));
+        const placeSuggestions: Suggestion[] = predictions
+          .map((p) => ({
+            text: p.structured_formatting.main_text,
+            description: p.structured_formatting.secondary_text,
+            placeId: p.place_id,
+            distanceMeters: p.distance_meters,
+          }))
+          .sort((a, b) => {
+            // 距離がある場合は距離順、ない場合は元の順序を維持
+            if (a.distanceMeters && b.distanceMeters) {
+              return a.distanceMeters - b.distanceMeters;
+            }
+            if (a.distanceMeters) return -1;
+            if (b.distanceMeters) return 1;
+            return 0;
+          });
         setSuggestions(placeSuggestions);
       } catch (error) {
         console.error('Place search error:', error);
@@ -368,11 +378,11 @@ export function SearchPage() {
           </div>
 
           {/* Row 2: Voice input + Typo fix buttons */}
-          <div className="flex gap-2 mt-2">
+          <div className="flex gap-2 mt-2 flex-wrap">
             <button
               onClick={startVoiceInput}
               disabled={isListening}
-              className={`${glassButtonStyle} flex-1 flex items-center justify-center gap-1`}
+              className={`${glassButtonStyle} flex items-center justify-center gap-1`}
             >
               <span>🎤</span>
               <span>{isListening ? '聞いています...' : '音声入力'}</span>
@@ -380,25 +390,21 @@ export function SearchPage() {
             <button
               onClick={fixTypos}
               disabled={!query.trim() || isFixingTypos || !hasGeminiApi}
-              className={`${glassButtonStyle} flex-1 flex items-center justify-center gap-1 disabled:opacity-50`}
+              className={`${glassButtonStyle} flex items-center justify-center gap-1 disabled:opacity-50`}
             >
               <span>✨</span>
               <span>{isFixingTypos ? '修正中...' : '誤字修正'}</span>
             </button>
-          </div>
-
-          {/* Row 3: Quick search buttons */}
-          <div className="flex gap-2 mt-2">
             <button
               onClick={() => handleInputChange('トイレ')}
-              className={`${glassButtonStyle} flex-1 flex items-center justify-center gap-1`}
+              className={`${glassButtonStyle} flex items-center justify-center gap-1`}
             >
               <span>🚻</span>
               <span>トイレを探す</span>
             </button>
             <button
               onClick={() => handleInputChange('コンビニ')}
-              className={`${glassButtonStyle} flex-1 flex items-center justify-center gap-1`}
+              className={`${glassButtonStyle} flex items-center justify-center gap-1`}
             >
               <span>🏪</span>
               <span>コンビニを探す</span>

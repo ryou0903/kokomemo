@@ -175,3 +175,77 @@ export function getPlaceDetails(
     );
   });
 }
+
+// 周辺検索結果の型
+export interface NearbyPlaceResult {
+  placeId: string;
+  name: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+  distanceMeters: number;
+}
+
+// 距離計算関数（Haversine formula）
+function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371000; // 地球の半径（メートル）
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// Text Search API を使用した周辺検索
+export async function searchNearbyPlaces(
+  query: string,
+  location: { lat: number; lng: number },
+  apiKey: string,
+  radius: number = 5000
+): Promise<NearbyPlaceResult[]> {
+  const url = 'https://places.googleapis.com/v1/places:searchText';
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': apiKey,
+        'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.location'
+      },
+      body: JSON.stringify({
+        textQuery: query,
+        locationBias: {
+          circle: {
+            center: { latitude: location.lat, longitude: location.lng },
+            radius: radius
+          }
+        },
+        languageCode: 'ja',
+        maxResultCount: 5
+      })
+    });
+
+    const data = await response.json();
+
+    if (!data.places) return [];
+
+    return data.places.map((place: any) => ({
+      placeId: place.id,
+      name: place.displayName?.text || '',
+      address: place.formattedAddress || '',
+      latitude: place.location?.latitude || 0,
+      longitude: place.location?.longitude || 0,
+      distanceMeters: calculateDistance(
+        location.lat, location.lng,
+        place.location?.latitude || 0, place.location?.longitude || 0
+      )
+    })).sort((a: NearbyPlaceResult, b: NearbyPlaceResult) =>
+      a.distanceMeters - b.distanceMeters
+    );
+  } catch (error) {
+    console.error('Nearby search error:', error);
+    return [];
+  }
+}

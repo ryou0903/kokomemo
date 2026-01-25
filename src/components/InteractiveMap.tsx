@@ -497,14 +497,33 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
     );
   }
 
+  // 現在地に戻る
+  const handleCenterOnCurrentLocation = useCallback(() => {
+    if (mapInstanceRef.current && currentLocation) {
+      mapInstanceRef.current.panTo(currentLocation);
+    }
+  }, [currentLocation]);
+
   return (
     <div className="relative w-full h-full">
       <div ref={mapRef} className="w-full h-full" />
       {isLoadingLocation && (
-        <div className="absolute top-2 left-2 bg-white/90 px-3 py-1.5 rounded-lg shadow text-sm flex items-center gap-2">
+        <div className="absolute top-2 right-2 bg-white/90 px-3 py-1.5 rounded-lg shadow text-sm flex items-center gap-2 z-10">
           <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
           <span>住所を取得中...</span>
         </div>
+      )}
+      {/* 現在地ボタン */}
+      {currentLocation && (
+        <button
+          onClick={handleCenterOnCurrentLocation}
+          className="absolute bottom-24 right-2.5 w-10 h-10 bg-[#3d4043] rounded-lg shadow-lg flex items-center justify-center active:bg-[#4d5053] z-10"
+          aria-label="現在地に移動"
+        >
+          <div className="w-5 h-5 rounded-full border-2 border-white flex items-center justify-center">
+            <div className="w-3 h-3 rounded-full bg-blue-500" />
+          </div>
+        </button>
       )}
       <div className="absolute bottom-2 left-2 bg-white/90 px-2 py-1 rounded text-xs text-text-secondary">
         ピンをドラッグまたは長押しで移動
