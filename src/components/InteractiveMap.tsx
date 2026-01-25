@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useCallback } from 'react';
 import { reverseGeocode } from '../lib/maps';
 
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
@@ -14,9 +14,17 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<google.maps.Map | null>(null);
   const markerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null);
+  const currentLocationMarkerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null);
   const longPressTimerRef = useRef<number | null>(null);
+  const watchIdRef = useRef<number | null>(null);
   const [isLoadingLocation, setIsLoadingLocation] = useState(false);
   const isInitializedRef = useRef(false);
+  const hasInitialPanRef = useRef(false);
+
+  // Current location state
+  const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [heading, setHeading] = useState<number | null>(null);
+  const [hasOrientationSensor, setHasOrientationSensor] = useState(false);
 
   // Store latest callback in ref to avoid re-initializing map
   const onLocationChangeRef = useRef(onLocationChange);
@@ -26,6 +34,158 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
 
   // Store initial position
   const initialPositionRef = useRef({ lat: latitude, lng: longitude });
+
+  // Watch current location
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+
+    const watchId = navigator.geolocation.watchPosition(
+      (position) => {
+        setCurrentLocation({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        });
+      },
+      (error) => {
+        console.error('Geolocation watch error:', error);
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 5000,
+        timeout: 10000,
+      }
+    );
+
+    watchIdRef.current = watchId;
+
+    return () => {
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+      }
+    };
+  }, []);
+
+  // Device orientation for heading
+  useEffect(() => {
+    const handleOrientation = (event: DeviceOrientationEvent) => {
+      // iOS: webkitCompassHeading is more accurate
+      const compassHeading = (event as any).webkitCompassHeading;
+      if (compassHeading !== undefined && compassHeading !== null) {
+        setHeading(compassHeading);
+        setHasOrientationSensor(true);
+      } else if (event.alpha !== null) {
+        // Android: alpha is counterclockwise from north, convert to clockwise
+        setHeading(360 - event.alpha);
+        setHasOrientationSensor(true);
+      }
+    };
+
+    // Check if permission API exists (iOS 13+)
+    const DeviceOrientationEventWithPermission = DeviceOrientationEvent as any;
+    if (typeof DeviceOrientationEventWithPermission.requestPermission === 'function') {
+      // Will request permission on user gesture later
+      // For now, don't add listener
+    } else {
+      // Android and older iOS - just add listener
+      window.addEventListener('deviceorientation', handleOrientation, true);
+    }
+
+    return () => {
+      window.removeEventListener('deviceorientation', handleOrientation, true);
+    };
+  }, []);
+
+  // Request orientation permission on iOS (needs user gesture)
+  const requestOrientationPermission = useCallback(async () => {
+    const DeviceOrientationEventWithPermission = DeviceOrientationEvent as any;
+    if (typeof DeviceOrientationEventWithPermission.requestPermission === 'function') {
+      try {
+        const permission = await DeviceOrientationEventWithPermission.requestPermission();
+        if (permission === 'granted') {
+          window.addEventListener('deviceorientation', (event: DeviceOrientationEvent) => {
+            const compassHeading = (event as any).webkitCompassHeading;
+            if (compassHeading !== undefined && compassHeading !== null) {
+              setHeading(compassHeading);
+              setHasOrientationSensor(true);
+            }
+          }, true);
+        }
+      } catch (error) {
+        console.error('Orientation permission error:', error);
+      }
+    }
+  }, []);
+
+  // Create current location marker element
+  const createCurrentLocationMarkerContent = useCallback(() => {
+    const container = document.createElement('div');
+    container.className = 'relative flex items-center justify-center';
+    container.style.width = '80px';
+    container.style.height = '80px';
+
+    // Direction indicator (cone shape)
+    const directionIndicator = document.createElement('div');
+    directionIndicator.id = 'direction-indicator';
+    directionIndicator.style.cssText = `
+      position: absolute;
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      background: conic-gradient(
+        from -30deg,
+        transparent 0deg,
+        rgba(59, 130, 246, 0.4) 0deg,
+        rgba(59, 130, 246, 0.4) 60deg,
+        transparent 60deg
+      );
+      opacity: 0;
+      transition: opacity 0.3s, transform 0.1s;
+      pointer-events: none;
+    `;
+    container.appendChild(directionIndicator);
+
+    // Pulse animation
+    const pulse = document.createElement('div');
+    pulse.style.cssText = `
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      background-color: rgb(59, 130, 246);
+      border-radius: 50%;
+      animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;
+      opacity: 0.4;
+    `;
+    container.appendChild(pulse);
+
+    // Blue dot (center)
+    const dot = document.createElement('div');
+    dot.style.cssText = `
+      position: relative;
+      width: 16px;
+      height: 16px;
+      background-color: rgb(59, 130, 246);
+      border-radius: 50%;
+      border: 3px solid white;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+      z-index: 10;
+    `;
+    container.appendChild(dot);
+
+    // Add keyframes for ping animation
+    if (!document.getElementById('ping-animation-style')) {
+      const style = document.createElement('style');
+      style.id = 'ping-animation-style';
+      style.textContent = `
+        @keyframes ping {
+          0% { transform: scale(1); opacity: 0.4; }
+          75%, 100% { transform: scale(2); opacity: 0; }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+
+    return container;
+  }, []);
 
   // Initialize map only once
   useEffect(() => {
@@ -48,6 +208,7 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
         gestureHandling: 'greedy',
       });
 
+      // Red pin marker (for place selection)
       const marker = new AdvancedMarkerElement({
         map,
         position: { lat: initialPos.lat, lng: initialPos.lng },
@@ -121,6 +282,8 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
           clearTimeout(longPressTimerRef.current);
           longPressTimerRef.current = null;
         }
+        // Request orientation permission on iOS (user gesture)
+        requestOrientationPermission();
       };
 
       const handleLongPressAt = async (clientX: number, clientY: number) => {
@@ -174,7 +337,63 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
         clearTimeout(longPressTimerRef.current);
       }
     };
-  }, [isLoaded]);
+  }, [isLoaded, requestOrientationPermission]);
+
+  // Create/update current location marker
+  useEffect(() => {
+    if (!mapInstanceRef.current || !isInitializedRef.current || !currentLocation) return;
+
+    const createMarker = async () => {
+      const { AdvancedMarkerElement } = await google.maps.importLibrary('marker') as google.maps.MarkerLibrary;
+
+      if (!currentLocationMarkerRef.current) {
+        // Create new marker
+        const content = createCurrentLocationMarkerContent();
+        currentLocationMarkerRef.current = new AdvancedMarkerElement({
+          map: mapInstanceRef.current!,
+          position: currentLocation,
+          content,
+        });
+      } else {
+        // Update position
+        currentLocationMarkerRef.current.position = currentLocation;
+      }
+    };
+
+    createMarker();
+  }, [currentLocation, createCurrentLocationMarkerContent]);
+
+  // Update direction indicator rotation
+  useEffect(() => {
+    if (!currentLocationMarkerRef.current || heading === null) return;
+
+    const content = currentLocationMarkerRef.current.content as HTMLElement;
+    const indicator = content?.querySelector('#direction-indicator') as HTMLElement;
+
+    if (indicator && hasOrientationSensor) {
+      indicator.style.transform = `rotate(${heading}deg)`;
+      indicator.style.opacity = '1';
+    }
+  }, [heading, hasOrientationSensor]);
+
+  // Pan map to new position when it changes significantly (initial location load)
+  useEffect(() => {
+    if (!mapInstanceRef.current || !markerRef.current || !isInitializedRef.current) return;
+    if (hasInitialPanRef.current) return; // Only pan once for initial location
+
+    const currentCenter = mapInstanceRef.current.getCenter();
+    if (!currentCenter) return;
+
+    const latDiff = Math.abs(currentCenter.lat() - latitude);
+    const lngDiff = Math.abs(currentCenter.lng() - longitude);
+
+    // Large movement (initial location load) - pan map and marker
+    if (latDiff > 0.01 || lngDiff > 0.01) {
+      hasInitialPanRef.current = true;
+      mapInstanceRef.current.panTo({ lat: latitude, lng: longitude });
+      markerRef.current.position = { lat: latitude, lng: longitude };
+    }
+  }, [latitude, longitude]);
 
   // Update marker position when props change (but don't pan map)
   useEffect(() => {
