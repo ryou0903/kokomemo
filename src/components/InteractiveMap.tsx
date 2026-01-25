@@ -16,27 +16,41 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
   const markerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null);
   const longPressTimerRef = useRef<number | null>(null);
   const [isLoadingLocation, setIsLoadingLocation] = useState(false);
+  const isInitializedRef = useRef(false);
 
-  // Initialize map
+  // Store latest callback in ref to avoid re-initializing map
+  const onLocationChangeRef = useRef(onLocationChange);
   useEffect(() => {
-    if (!isLoaded || !mapRef.current || !window.google) return;
+    onLocationChangeRef.current = onLocationChange;
+  }, [onLocationChange]);
+
+  // Store initial position
+  const initialPositionRef = useRef({ lat: latitude, lng: longitude });
+
+  // Initialize map only once
+  useEffect(() => {
+    if (!isLoaded || !mapRef.current || !window.google || isInitializedRef.current) return;
+
+    isInitializedRef.current = true;
 
     const initMap = async () => {
       const { Map } = await google.maps.importLibrary('maps') as google.maps.MapsLibrary;
       const { AdvancedMarkerElement } = await google.maps.importLibrary('marker') as google.maps.MarkerLibrary;
 
+      const initialPos = initialPositionRef.current;
+
       const map = new Map(mapRef.current!, {
-        center: { lat: latitude, lng: longitude },
+        center: { lat: initialPos.lat, lng: initialPos.lng },
         zoom: 16,
         mapId: 'kokomemo-map',
         disableDefaultUI: true,
         zoomControl: true,
-        gestureHandling: 'greedy', // Allow single finger scroll
+        gestureHandling: 'greedy',
       });
 
       const marker = new AdvancedMarkerElement({
         map,
-        position: { lat: latitude, lng: longitude },
+        position: { lat: initialPos.lat, lng: initialPos.lng },
         gmpDraggable: true,
       });
 
@@ -46,106 +60,54 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
       // Handle marker drag end
       marker.addListener('dragend', async () => {
         const position = marker.position as google.maps.LatLngLiteral;
-        if (position && onLocationChange) {
+        if (position && onLocationChangeRef.current) {
           setIsLoadingLocation(true);
           try {
             const result = await reverseGeocode(position.lat, position.lng, GOOGLE_MAPS_API_KEY);
-            onLocationChange(position.lat, position.lng, result.address, result.placeName);
+            onLocationChangeRef.current(position.lat, position.lng, result.address, result.placeName);
           } catch (error) {
             console.error('Reverse geocode error:', error);
-            onLocationChange(position.lat, position.lng, `${position.lat.toFixed(6)}, ${position.lng.toFixed(6)}`);
+            onLocationChangeRef.current(position.lat, position.lng, `${position.lat.toFixed(6)}, ${position.lng.toFixed(6)}`);
           } finally {
             setIsLoadingLocation(false);
           }
         }
       });
 
-      // Handle long press on map
+      // Handle long press using map click event
       let pressStartPos = { x: 0, y: 0 };
+      let isPressing = false;
 
-      const handlePressStart = (e: MouseEvent | TouchEvent) => {
-        if ('touches' in e) {
+      const handleTouchStart = (e: TouchEvent) => {
+        if (e.touches.length === 1) {
+          isPressing = true;
           pressStartPos = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-        } else {
-          pressStartPos = { x: e.clientX, y: e.clientY };
-        }
 
-        longPressTimerRef.current = window.setTimeout(async () => {
-          // Get position from event
-          let clientX: number, clientY: number;
-          if ('touches' in e) {
-            clientX = e.touches[0].clientX;
-            clientY = e.touches[0].clientY;
-          } else {
-            clientX = e.clientX;
-            clientY = e.clientY;
-          }
-
-          // Convert screen position to lat/lng
-          const rect = mapRef.current!.getBoundingClientRect();
-          const point = new google.maps.Point(clientX - rect.left, clientY - rect.top);
-          const projection = map.getProjection();
-          const bounds = map.getBounds();
-
-          if (projection && bounds) {
-            const ne = projection.fromLatLngToPoint(bounds.getNorthEast())!;
-            const sw = projection.fromLatLngToPoint(bounds.getSouthWest())!;
-            const scale = Math.pow(2, map.getZoom()!);
-
-            const worldPoint = new google.maps.Point(
-              sw.x + (point.x / scale) * (ne.x - sw.x) / mapRef.current!.clientWidth * scale,
-              ne.y + (point.y / scale) * (sw.y - ne.y) / mapRef.current!.clientHeight * scale
-            );
-
-            const latLng = projection.fromPointToLatLng(worldPoint);
-
-            if (latLng && onLocationChange) {
-              const newLat = latLng.lat();
-              const newLng = latLng.lng();
-
-              // Move marker
-              marker.position = { lat: newLat, lng: newLng };
-              map.panTo({ lat: newLat, lng: newLng });
-
-              // Get address
-              setIsLoadingLocation(true);
-              try {
-                const result = await reverseGeocode(newLat, newLng, GOOGLE_MAPS_API_KEY);
-                onLocationChange(newLat, newLng, result.address, result.placeName);
-              } catch (error) {
-                console.error('Reverse geocode error:', error);
-                onLocationChange(newLat, newLng, `${newLat.toFixed(6)}, ${newLng.toFixed(6)}`);
-              } finally {
-                setIsLoadingLocation(false);
+          longPressTimerRef.current = window.setTimeout(() => {
+            if (isPressing) {
+              // Trigger long press action at current touch position
+              const touch = e.touches[0];
+              if (touch) {
+                handleLongPressAt(touch.clientX, touch.clientY);
               }
             }
-          }
-        }, 500); // 500ms for long press
-      };
-
-      const handlePressEnd = () => {
-        if (longPressTimerRef.current) {
-          clearTimeout(longPressTimerRef.current);
-          longPressTimerRef.current = null;
+          }, 600);
         }
       };
 
-      const handlePressMove = (e: MouseEvent | TouchEvent) => {
-        let currentX: number, currentY: number;
-        if ('touches' in e) {
-          currentX = e.touches[0].clientX;
-          currentY = e.touches[0].clientY;
-        } else {
-          currentX = e.clientX;
-          currentY = e.clientY;
-        }
+      const handleTouchMove = (e: TouchEvent) => {
+        if (!isPressing) return;
 
-        // Cancel long press if moved too much
-        const moveThreshold = 10;
+        const touch = e.touches[0];
+        if (!touch) return;
+
+        const moveThreshold = 15;
         if (
-          Math.abs(currentX - pressStartPos.x) > moveThreshold ||
-          Math.abs(currentY - pressStartPos.y) > moveThreshold
+          Math.abs(touch.clientX - pressStartPos.x) > moveThreshold ||
+          Math.abs(touch.clientY - pressStartPos.y) > moveThreshold
         ) {
+          // User is scrolling, cancel long press
+          isPressing = false;
           if (longPressTimerRef.current) {
             clearTimeout(longPressTimerRef.current);
             longPressTimerRef.current = null;
@@ -153,25 +115,56 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
         }
       };
 
-      mapRef.current!.addEventListener('mousedown', handlePressStart);
-      mapRef.current!.addEventListener('mouseup', handlePressEnd);
-      mapRef.current!.addEventListener('mouseleave', handlePressEnd);
-      mapRef.current!.addEventListener('mousemove', handlePressMove);
-      mapRef.current!.addEventListener('touchstart', handlePressStart);
-      mapRef.current!.addEventListener('touchend', handlePressEnd);
-      mapRef.current!.addEventListener('touchcancel', handlePressEnd);
-      mapRef.current!.addEventListener('touchmove', handlePressMove);
-
-      return () => {
-        mapRef.current?.removeEventListener('mousedown', handlePressStart);
-        mapRef.current?.removeEventListener('mouseup', handlePressEnd);
-        mapRef.current?.removeEventListener('mouseleave', handlePressEnd);
-        mapRef.current?.removeEventListener('mousemove', handlePressMove);
-        mapRef.current?.removeEventListener('touchstart', handlePressStart);
-        mapRef.current?.removeEventListener('touchend', handlePressEnd);
-        mapRef.current?.removeEventListener('touchcancel', handlePressEnd);
-        mapRef.current?.removeEventListener('touchmove', handlePressMove);
+      const handleTouchEnd = () => {
+        isPressing = false;
+        if (longPressTimerRef.current) {
+          clearTimeout(longPressTimerRef.current);
+          longPressTimerRef.current = null;
+        }
       };
+
+      const handleLongPressAt = async (clientX: number, clientY: number) => {
+        const rect = mapRef.current!.getBoundingClientRect();
+        const x = clientX - rect.left;
+        const y = clientY - rect.top;
+
+        // Use overlay projection for accurate conversion
+        const bounds = map.getBounds();
+        const ne = bounds?.getNorthEast();
+        const sw = bounds?.getSouthWest();
+
+        if (ne && sw) {
+          const mapWidth = rect.width;
+          const mapHeight = rect.height;
+
+          const lng = sw.lng() + (x / mapWidth) * (ne.lng() - sw.lng());
+          const lat = ne.lat() - (y / mapHeight) * (ne.lat() - sw.lat());
+
+          // Move marker without panning
+          marker.position = { lat, lng };
+
+          // Get address
+          if (onLocationChangeRef.current) {
+            setIsLoadingLocation(true);
+            try {
+              const result = await reverseGeocode(lat, lng, GOOGLE_MAPS_API_KEY);
+              onLocationChangeRef.current(lat, lng, result.address, result.placeName);
+            } catch (error) {
+              console.error('Reverse geocode error:', error);
+              onLocationChangeRef.current(lat, lng, `${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+            } finally {
+              setIsLoadingLocation(false);
+            }
+          }
+        }
+      };
+
+      // Only add touch events for long press (mouse can use drag)
+      const mapElement = mapRef.current!;
+      mapElement.addEventListener('touchstart', handleTouchStart, { passive: true });
+      mapElement.addEventListener('touchmove', handleTouchMove, { passive: true });
+      mapElement.addEventListener('touchend', handleTouchEnd);
+      mapElement.addEventListener('touchcancel', handleTouchEnd);
     };
 
     initMap();
@@ -181,13 +174,20 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
         clearTimeout(longPressTimerRef.current);
       }
     };
-  }, [isLoaded, latitude, longitude, onLocationChange]);
+  }, [isLoaded]);
 
-  // Update marker position when props change
+  // Update marker position when props change (but don't pan map)
   useEffect(() => {
-    if (markerRef.current && mapInstanceRef.current) {
-      markerRef.current.position = { lat: latitude, lng: longitude };
-      mapInstanceRef.current.panTo({ lat: latitude, lng: longitude });
+    if (markerRef.current && isInitializedRef.current) {
+      const currentPos = markerRef.current.position as google.maps.LatLngLiteral | null;
+      // Only update if position actually changed significantly (avoid floating point issues)
+      if (currentPos) {
+        const latDiff = Math.abs(currentPos.lat - latitude);
+        const lngDiff = Math.abs(currentPos.lng - longitude);
+        if (latDiff > 0.00001 || lngDiff > 0.00001) {
+          markerRef.current.position = { lat: latitude, lng: longitude };
+        }
+      }
     }
   }, [latitude, longitude]);
 
@@ -209,7 +209,7 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
         </div>
       )}
       <div className="absolute bottom-2 left-2 bg-white/90 px-2 py-1 rounded text-xs text-text-secondary">
-        長押しでピンを移動
+        ピンをドラッグまたは長押しで移動
       </div>
     </div>
   );
