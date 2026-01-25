@@ -2,7 +2,8 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { InteractiveMap } from '../components/InteractiveMap';
 import { useGoogleMaps, usePlacesAutocomplete } from '../hooks/useGoogleMaps';
-import { openNavigation, getCurrentLocation } from '../lib/maps';
+import { openNavigation, getCurrentLocation, searchNearbyPlaces } from '../lib/maps';
+import type { NearbyPlaceResult } from '../lib/maps';
 import { savePlace, getSettings, addSearchHistory } from '../lib/storage';
 import { useToast } from '../contexts/ToastContext';
 
@@ -220,33 +221,44 @@ export function SearchPage() {
 
       try {
         const origin = mapPositionRef.current || undefined;
+
+        // 1. オートコンプリート取得
         const predictions = await getPlacePredictionsRef.current(value, origin);
         if (queryRef.current !== value) return;
 
+        // 2. 周辺検索（現在地がある場合のみ）
+        let nearbyResults: NearbyPlaceResult[] = [];
+        if (origin && GOOGLE_MAPS_API_KEY) {
+          nearbyResults = await searchNearbyPlaces(value, origin, GOOGLE_MAPS_API_KEY);
+        }
+        if (queryRef.current !== value) return;
+
+        // 3. マージ（周辺検索を優先、重複排除）
+        const nearbyIds = new Set(nearbyResults.map(r => r.placeId));
+        const nearbySuggestions: Suggestion[] = nearbyResults.map(r => ({
+          text: r.name,
+          description: r.address,
+          placeId: r.placeId,
+          distanceMeters: r.distanceMeters,
+        }));
         const placeSuggestions: Suggestion[] = predictions
+          .filter(p => !nearbyIds.has(p.place_id))
           .map((p) => ({
             text: p.structured_formatting.main_text,
             description: p.structured_formatting.secondary_text,
             placeId: p.place_id,
             distanceMeters: p.distance_meters,
-          }))
-          .sort((a, b) => {
-            // 距離がある場合は距離順、ない場合は元の順序を維持
-            if (a.distanceMeters && b.distanceMeters) {
-              return a.distanceMeters - b.distanceMeters;
-            }
-            if (a.distanceMeters) return -1;
-            if (b.distanceMeters) return 1;
-            return 0;
-          });
-        setSuggestions(placeSuggestions);
+          }));
+
+        // 4. 周辺検索結果を先頭に、その後にオートコンプリート結果
+        setSuggestions([...nearbySuggestions, ...placeSuggestions]);
       } catch (error) {
         console.error('Place search error:', error);
         setSuggestions([]);
       } finally {
         setIsSearching(false);
       }
-    }, 300);
+    }, 800);
   };
 
   // Handle suggestion selection
