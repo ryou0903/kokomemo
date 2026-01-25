@@ -17,12 +17,15 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
   const currentLocationMarkerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null);
   const longPressTimerRef = useRef<number | null>(null);
   const watchIdRef = useRef<number | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
   const [isLoadingLocation, setIsLoadingLocation] = useState(false);
   const isInitializedRef = useRef(false);
   const hasInitialPanRef = useRef(false);
 
   // Current location state
   const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [smoothLocation, setSmoothLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const targetLocationRef = useRef<{ lat: number; lng: number } | null>(null);
   const [heading, setHeading] = useState<number | null>(null);
   const [hasOrientationSensor, setHasOrientationSensor] = useState(false);
 
@@ -65,17 +68,76 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
     };
   }, []);
 
-  // Device orientation for heading
+  // Smooth location interpolation (lerp)
   useEffect(() => {
+    if (!currentLocation) return;
+
+    targetLocationRef.current = currentLocation;
+
+    // First time - set immediately
+    if (!smoothLocation) {
+      setSmoothLocation(currentLocation);
+      return;
+    }
+
+    // Start animation
+    const animate = () => {
+      const target = targetLocationRef.current;
+      if (!target) return;
+
+      setSmoothLocation((current) => {
+        if (!current) return target;
+
+        const factor = 0.15; // Smooth factor
+        const newLat = current.lat + (target.lat - current.lat) * factor;
+        const newLng = current.lng + (target.lng - current.lng) * factor;
+
+        // Close enough - snap to target
+        const dist = Math.abs(target.lat - newLat) + Math.abs(target.lng - newLng);
+        if (dist < 0.0000001) {
+          return target;
+        }
+
+        // Continue animation
+        animationFrameRef.current = requestAnimationFrame(animate);
+        return { lat: newLat, lng: newLng };
+      });
+    };
+
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+    }
+    animationFrameRef.current = requestAnimationFrame(animate);
+
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+  }, [currentLocation]);
+
+  // Device orientation for heading (supports both Android and iOS)
+  useEffect(() => {
+    let absoluteSupported = false;
+
     const handleOrientation = (event: DeviceOrientationEvent) => {
+      // Skip if absolute orientation is available (Android)
+      if (absoluteSupported) return;
+
       // iOS: webkitCompassHeading is more accurate
       const compassHeading = (event as any).webkitCompassHeading;
       if (compassHeading !== undefined && compassHeading !== null) {
         setHeading(compassHeading);
         setHasOrientationSensor(true);
-      } else if (event.alpha !== null) {
-        // Android: alpha is counterclockwise from north, convert to clockwise
-        setHeading(360 - event.alpha);
+      }
+    };
+
+    const handleAbsoluteOrientation = (event: DeviceOrientationEvent) => {
+      // Android: deviceorientationabsolute gives north-relative heading
+      absoluteSupported = true;
+      if (event.alpha !== null) {
+        // alpha is counterclockwise from north, convert to clockwise
+        setHeading((360 - event.alpha) % 360);
         setHasOrientationSensor(true);
       }
     };
@@ -86,11 +148,13 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
       // Will request permission on user gesture later
       // For now, don't add listener
     } else {
-      // Android and older iOS - just add listener
+      // Android and older iOS - add both listeners
+      window.addEventListener('deviceorientationabsolute', handleAbsoluteOrientation as EventListener, true);
       window.addEventListener('deviceorientation', handleOrientation, true);
     }
 
     return () => {
+      window.removeEventListener('deviceorientationabsolute', handleAbsoluteOrientation as EventListener, true);
       window.removeEventListener('deviceorientation', handleOrientation, true);
     };
   }, []);
@@ -345,9 +409,9 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
     };
   }, [isLoaded, requestOrientationPermission]);
 
-  // Create/update current location marker
+  // Create/update current location marker using smooth location
   useEffect(() => {
-    if (!mapInstanceRef.current || !isInitializedRef.current || !currentLocation) return;
+    if (!mapInstanceRef.current || !isInitializedRef.current || !smoothLocation) return;
 
     const createMarker = async () => {
       const { AdvancedMarkerElement } = await google.maps.importLibrary('marker') as google.maps.MarkerLibrary;
@@ -357,19 +421,17 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
         const content = createCurrentLocationMarkerContent();
         currentLocationMarkerRef.current = new AdvancedMarkerElement({
           map: mapInstanceRef.current!,
-          position: currentLocation,
+          position: smoothLocation,
           content,
         });
-        // Note: Do NOT add CSS transition to marker element - it interferes with
-        // Google Maps' internal transform updates during zoom/pan
       } else {
-        // Update position
-        currentLocationMarkerRef.current.position = currentLocation;
+        // Update position with smooth interpolated value
+        currentLocationMarkerRef.current.position = smoothLocation;
       }
     };
 
     createMarker();
-  }, [currentLocation, createCurrentLocationMarkerContent]);
+  }, [smoothLocation, createCurrentLocationMarkerContent]);
 
   // Update direction indicator rotation
   useEffect(() => {
@@ -381,7 +443,6 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
     if (indicator) {
       if (heading !== null && hasOrientationSensor) {
         // Show indicator and rotate to heading
-        // The rotation should be around the center of the element
         indicator.style.transform = `rotate(${heading}deg)`;
         indicator.style.opacity = '1';
       } else {

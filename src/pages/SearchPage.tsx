@@ -288,7 +288,7 @@ export function SearchPage() {
   const hasGeminiApi = !!GEMINI_API_KEY;
 
   // Glass style classes
-  const glassStyle = 'bg-white/80 backdrop-blur-xl shadow-lg border border-white/50';
+  const glassStyle = 'bg-white/80 backdrop-blur-xl shadow-lg border border-gray-200';
   const glassButtonStyle = `${glassStyle} rounded-full px-2.5 py-1 text-sm font-medium text-text active:bg-white/90 transition-colors`;
   const glassInputStyle = `${glassStyle} rounded-full px-3 py-1 text-base outline-none focus:ring-2 focus:ring-primary/30`;
 
