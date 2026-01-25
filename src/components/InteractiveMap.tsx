@@ -118,71 +118,69 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
 
   // Create current location marker element
   const createCurrentLocationMarkerContent = useCallback(() => {
+    // Container with 0 size - elements are positioned absolutely from center
+    // This prevents zoom drift issues
     const container = document.createElement('div');
-    container.className = 'relative flex items-center justify-center';
-    container.style.width = '80px';
-    container.style.height = '80px';
+    container.style.cssText = `
+      position: relative;
+      width: 0;
+      height: 0;
+    `;
 
-    // Direction indicator (cone shape)
+    // Direction indicator (beam shape pointing upward, will be rotated)
     const directionIndicator = document.createElement('div');
     directionIndicator.id = 'direction-indicator';
     directionIndicator.style.cssText = `
       position: absolute;
-      width: 80px;
-      height: 80px;
+      left: -60px;
+      top: -60px;
+      width: 120px;
+      height: 120px;
       border-radius: 50%;
       background: conic-gradient(
-        from -30deg,
+        from -22.5deg,
         transparent 0deg,
-        rgba(59, 130, 246, 0.4) 0deg,
-        rgba(59, 130, 246, 0.4) 60deg,
-        transparent 60deg
+        rgba(59, 130, 246, 0.35) 0deg,
+        rgba(59, 130, 246, 0.2) 22.5deg,
+        rgba(59, 130, 246, 0.2) 22.5deg,
+        rgba(59, 130, 246, 0.35) 45deg,
+        transparent 45deg
       );
       opacity: 0;
-      transition: opacity 0.3s, transform 0.1s;
+      transition: opacity 0.3s ease-out;
       pointer-events: none;
     `;
     container.appendChild(directionIndicator);
 
-    // Pulse animation
-    const pulse = document.createElement('div');
-    pulse.style.cssText = `
+    // Outer glow ring (subtle)
+    const glowRing = document.createElement('div');
+    glowRing.style.cssText = `
       position: absolute;
-      width: 20px;
-      height: 20px;
-      background-color: rgb(59, 130, 246);
+      left: -20px;
+      top: -20px;
+      width: 40px;
+      height: 40px;
       border-radius: 50%;
-      animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;
-      opacity: 0.4;
+      background: radial-gradient(circle, rgba(59, 130, 246, 0.3) 0%, transparent 70%);
+      pointer-events: none;
     `;
-    container.appendChild(pulse);
+    container.appendChild(glowRing);
 
-    // Blue dot (center)
+    // Blue dot (center) - larger size (24px)
     const dot = document.createElement('div');
     dot.style.cssText = `
-      position: relative;
-      width: 16px;
-      height: 16px;
+      position: absolute;
+      left: -12px;
+      top: -12px;
+      width: 24px;
+      height: 24px;
       background-color: rgb(59, 130, 246);
       border-radius: 50%;
-      border: 3px solid white;
-      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+      border: 4px solid white;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
       z-index: 10;
     `;
     container.appendChild(dot);
-
-    // Add keyframes for ping animation
-    if (!document.getElementById('ping-animation-style')) {
-      const style = document.createElement('style');
-      style.id = 'ping-animation-style';
-      style.textContent = `
-        @keyframes ping {
-          0% { transform: scale(1); opacity: 0.4; }
-          75%, 100% { transform: scale(2); opacity: 0; }
-        }
-      `;
-      document.head.appendChild(style);
-    }
 
     return container;
   }, []);
@@ -354,8 +352,16 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
           position: currentLocation,
           content,
         });
+
+        // Add smooth transition to marker element for smooth movement
+        requestAnimationFrame(() => {
+          const markerElement = currentLocationMarkerRef.current?.element;
+          if (markerElement) {
+            markerElement.style.transition = 'transform 0.5s ease-out';
+          }
+        });
       } else {
-        // Update position
+        // Update position - the CSS transition will smooth the movement
         currentLocationMarkerRef.current.position = currentLocation;
       }
     };
@@ -371,8 +377,11 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
     const indicator = content?.querySelector('#direction-indicator') as HTMLElement;
 
     if (indicator && hasOrientationSensor) {
+      // Rotate around center - the indicator is already positioned with left/top offset
+      // so we just need to rotate it
       indicator.style.transform = `rotate(${heading}deg)`;
       indicator.style.opacity = '1';
+      indicator.style.transition = 'transform 0.15s ease-out, opacity 0.3s ease-out';
     }
   }, [heading, hasOrientationSensor]);
 
