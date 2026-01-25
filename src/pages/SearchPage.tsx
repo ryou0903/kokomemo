@@ -86,7 +86,7 @@ export function SearchPage() {
 
     recognition.onresult = (event: any) => {
       const transcript = event.results[0][0].transcript;
-      setQuery(transcript);
+      handleInputChange(transcript);
       setIsListening(false);
     };
 
