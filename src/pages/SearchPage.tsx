@@ -375,8 +375,8 @@ export function SearchPage() {
 
   return (
     <div className="fixed inset-0 bg-gray-200">
-      {/* Full-screen Map */}
-      {hasGoogleApi && mapPosition && !isLoadingInitialLocation && (
+      {/* Full-screen Map - isLoadedも確認 */}
+      {hasGoogleApi && mapPosition && isLoaded && (
         <InteractiveMap
           latitude={selectedPlace?.latitude ?? mapPosition.lat}
           longitude={selectedPlace?.longitude ?? mapPosition.lng}
@@ -394,12 +394,14 @@ export function SearchPage() {
         />
       )}
 
-      {/* Loading indicator for initial location */}
-      {isLoadingInitialLocation && (
+      {/* Loading indicator - 位置取得中またはマップロード中 */}
+      {(isLoadingInitialLocation || (hasGoogleApi && !isLoaded)) && (
         <div className="absolute inset-0 flex items-center justify-center bg-gray-200">
           <div className={`${glassStyle} rounded-2xl p-6 flex flex-col items-center gap-3`}>
             <div className="h-8 w-8 animate-spin rounded-full border-3 border-primary border-t-transparent" />
-            <p className="text-text-secondary text-sm">現在地を取得中...</p>
+            <p className="text-text-secondary text-sm">
+              {isLoadingInitialLocation ? '現在地を取得中...' : '地図を読み込み中...'}
+            </p>
           </div>
         </div>
       )}
