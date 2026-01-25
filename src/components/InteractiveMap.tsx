@@ -191,45 +191,48 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
       height: 0;
     `;
 
-    // Direction indicator (beam shape pointing upward, will be rotated)
+    // Outer accuracy circle (subtle blue ring like Google Maps)
+    const accuracyCircle = document.createElement('div');
+    accuracyCircle.style.cssText = `
+      position: absolute;
+      left: -75px;
+      top: -75px;
+      width: 150px;
+      height: 150px;
+      border-radius: 50%;
+      border: 1px solid rgba(59, 130, 246, 0.25);
+      background: radial-gradient(circle, rgba(59, 130, 246, 0.06) 0%, transparent 70%);
+      pointer-events: none;
+    `;
+    container.appendChild(accuracyCircle);
+
+    // Direction indicator beam (cone shape with radial fade - Google Maps style)
     const directionIndicator = document.createElement('div');
     directionIndicator.id = 'direction-indicator';
     directionIndicator.style.cssText = `
       position: absolute;
-      left: -60px;
-      top: -60px;
-      width: 120px;
-      height: 120px;
+      left: -75px;
+      top: -75px;
+      width: 150px;
+      height: 150px;
       border-radius: 50%;
       background: conic-gradient(
-        from -22.5deg,
+        from -30deg,
         transparent 0deg,
-        rgba(59, 130, 246, 0.4) 0deg,
-        rgba(59, 130, 246, 0.15) 22.5deg,
-        rgba(59, 130, 246, 0.15) 22.5deg,
-        rgba(59, 130, 246, 0.4) 45deg,
-        transparent 45deg
+        rgba(59, 130, 246, 0.5) 0deg,
+        rgba(59, 130, 246, 0.3) 30deg,
+        rgba(59, 130, 246, 0.3) 30deg,
+        rgba(59, 130, 246, 0.5) 60deg,
+        transparent 60deg
       );
+      -webkit-mask-image: radial-gradient(circle, transparent 10%, black 15%, black 55%, transparent 100%);
+      mask-image: radial-gradient(circle, transparent 10%, black 15%, black 55%, transparent 100%);
       transform-origin: center center;
       opacity: 0;
       transition: opacity 0.3s ease-out;
       pointer-events: none;
     `;
     container.appendChild(directionIndicator);
-
-    // Outer glow ring (subtle)
-    const glowRing = document.createElement('div');
-    glowRing.style.cssText = `
-      position: absolute;
-      left: -20px;
-      top: -20px;
-      width: 40px;
-      height: 40px;
-      border-radius: 50%;
-      background: radial-gradient(circle, rgba(59, 130, 246, 0.3) 0%, transparent 70%);
-      pointer-events: none;
-    `;
-    container.appendChild(glowRing);
 
     // Blue dot (center) - larger size (24px)
     const dot = document.createElement('div');
