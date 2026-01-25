@@ -108,9 +108,20 @@ export interface PlaceSearchResult {
 let autocompleteService: google.maps.places.AutocompleteService | null = null;
 let placesService: google.maps.places.PlacesService | null = null;
 
-export function initPlacesServices(map: google.maps.Map): void {
-  autocompleteService = new google.maps.places.AutocompleteService();
-  placesService = new google.maps.places.PlacesService(map);
+// 遅延初期化: AutocompleteServiceを取得
+function getAutocompleteService(): google.maps.places.AutocompleteService | null {
+  if (!autocompleteService && window.google?.maps?.places) {
+    autocompleteService = new google.maps.places.AutocompleteService();
+  }
+  return autocompleteService;
+}
+
+// 遅延初期化: PlacesServiceを取得（ダミーdivを使用）
+function getPlacesService(): google.maps.places.PlacesService | null {
+  if (!placesService && window.google?.maps?.places) {
+    placesService = new google.maps.places.PlacesService(document.createElement('div'));
+  }
+  return placesService;
 }
 
 export function getAutocomplete(
@@ -118,12 +129,13 @@ export function getAutocomplete(
   sessionToken: google.maps.places.AutocompleteSessionToken
 ): Promise<google.maps.places.AutocompletePrediction[]> {
   return new Promise((resolve, reject) => {
-    if (!autocompleteService) {
+    const service = getAutocompleteService();
+    if (!service) {
       reject(new Error('Places service not initialized'));
       return;
     }
 
-    autocompleteService.getPlacePredictions(
+    service.getPlacePredictions(
       {
         input,
         sessionToken,
@@ -148,12 +160,13 @@ export function getPlaceDetails(
   sessionToken: google.maps.places.AutocompleteSessionToken
 ): Promise<PlaceSearchResult> {
   return new Promise((resolve, reject) => {
-    if (!placesService) {
+    const service = getPlacesService();
+    if (!service) {
       reject(new Error('Places service not initialized'));
       return;
     }
 
-    placesService.getDetails(
+    service.getDetails(
       {
         placeId,
         fields: ['name', 'formatted_address', 'geometry'],
