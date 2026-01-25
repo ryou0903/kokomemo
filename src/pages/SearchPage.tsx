@@ -37,7 +37,8 @@ export function SearchPage() {
   const [isFixingTypos, setIsFixingTypos] = useState(false);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [selectedPlace, setSelectedPlace] = useState<PlaceResult | null>(null);
-  const [mapPosition, setMapPosition] = useState(DEFAULT_POSITION);
+  const [mapPosition, setMapPosition] = useState<{ lat: number; lng: number } | null>(null);
+  const [isLoadingInitialLocation, setIsLoadingInitialLocation] = useState(true);
 
   const { isLoaded, loadError } = useGoogleMaps({ apiKey: GOOGLE_MAPS_API_KEY });
   const { getPlacePredictions, getPlaceDetails, isReady } = usePlacesAutocomplete(isLoaded);
@@ -55,6 +56,10 @@ export function SearchPage() {
       })
       .catch(() => {
         // Use default position if location access denied
+        setMapPosition(DEFAULT_POSITION);
+      })
+      .finally(() => {
+        setIsLoadingInitialLocation(false);
       });
   }, []);
 
@@ -290,7 +295,7 @@ export function SearchPage() {
   return (
     <div className="fixed inset-0 bg-gray-200">
       {/* Full-screen Map */}
-      {hasGoogleApi && (
+      {hasGoogleApi && mapPosition && !isLoadingInitialLocation && (
         <InteractiveMap
           latitude={selectedPlace?.latitude ?? mapPosition.lat}
           longitude={selectedPlace?.longitude ?? mapPosition.lng}
@@ -307,6 +312,16 @@ export function SearchPage() {
             }
           }}
         />
+      )}
+
+      {/* Loading indicator for initial location */}
+      {isLoadingInitialLocation && (
+        <div className="absolute inset-0 flex items-center justify-center bg-gray-200">
+          <div className={`${glassStyle} rounded-2xl p-6 flex flex-col items-center gap-3`}>
+            <div className="h-8 w-8 animate-spin rounded-full border-3 border-primary border-t-transparent" />
+            <p className="text-text-secondary text-sm">現在地を取得中...</p>
+          </div>
+        </div>
       )}
 
       {/* Floating UI - Top */}
