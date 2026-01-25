@@ -86,7 +86,7 @@ export function usePlacesAutocomplete(isGoogleLoaded: boolean) {
   }, []);
 
   const getPlacePredictions = useCallback(
-    async (input: string): Promise<google.maps.places.AutocompletePrediction[]> => {
+    async (input: string, origin?: { lat: number; lng: number }): Promise<google.maps.places.AutocompletePrediction[]> => {
       if (!autocompleteService || !sessionToken || !input.trim()) {
         return [];
       }
@@ -97,6 +97,7 @@ export function usePlacesAutocomplete(isGoogleLoaded: boolean) {
             input,
             sessionToken,
             componentRestrictions: { country: 'jp' },
+            origin: origin ? new google.maps.LatLng(origin.lat, origin.lng) : undefined,
           },
           (predictions, status) => {
             if (status === google.maps.places.PlacesServiceStatus.OK && predictions) {

@@ -24,7 +24,16 @@ interface Suggestion {
   text: string;
   description?: string;
   placeId: string;
+  distanceMeters?: number;
 }
+
+// Format distance for display
+const formatDistance = (meters: number): string => {
+  if (meters < 1000) {
+    return `${Math.round(meters)}m`;
+  }
+  return `${(meters / 1000).toFixed(1)}km`;
+};
 
 export function SearchPage() {
   const navigate = useNavigate();
@@ -47,6 +56,7 @@ export function SearchPage() {
   const queryRef = useRef(query);
   const isReadyRef = useRef(isReady);
   const getPlacePredictionsRef = useRef(getPlacePredictions);
+  const mapPositionRef = useRef(mapPosition);
 
   // Get current location on mount
   useEffect(() => {
@@ -75,6 +85,10 @@ export function SearchPage() {
   useEffect(() => {
     getPlacePredictionsRef.current = getPlacePredictions;
   }, [getPlacePredictions]);
+
+  useEffect(() => {
+    mapPositionRef.current = mapPosition;
+  }, [mapPosition]);
 
   useEffect(() => {
     if (loadError) {
@@ -205,13 +219,15 @@ export function SearchPage() {
       }
 
       try {
-        const predictions = await getPlacePredictionsRef.current(value);
+        const origin = mapPositionRef.current || undefined;
+        const predictions = await getPlacePredictionsRef.current(value, origin);
         if (queryRef.current !== value) return;
 
         const placeSuggestions: Suggestion[] = predictions.map((p) => ({
           text: p.structured_formatting.main_text,
           description: p.structured_formatting.secondary_text,
           placeId: p.place_id,
+          distanceMeters: p.distance_meters,
         }));
         setSuggestions(placeSuggestions);
       } catch (error) {
@@ -289,7 +305,7 @@ export function SearchPage() {
 
   // Glass style classes
   const glassStyle = 'bg-white/80 backdrop-blur-xl shadow-lg border border-gray-200';
-  const glassButtonStyle = `${glassStyle} rounded-full px-2.5 py-1 text-sm font-medium text-text active:bg-white/90 transition-colors`;
+  const glassButtonStyle = `${glassStyle} rounded-full px-2 py-0.5 text-sm font-medium text-text active:bg-white/90 transition-colors`;
   const glassInputStyle = `${glassStyle} rounded-full px-3 py-1 text-base outline-none focus:ring-2 focus:ring-primary/30`;
 
   return (
@@ -370,6 +386,24 @@ export function SearchPage() {
               <span>{isFixingTypos ? '修正中...' : '誤字修正'}</span>
             </button>
           </div>
+
+          {/* Row 3: Quick search buttons */}
+          <div className="flex gap-2 mt-2">
+            <button
+              onClick={() => handleInputChange('トイレ')}
+              className={`${glassButtonStyle} flex-1 flex items-center justify-center gap-1`}
+            >
+              <span>🚻</span>
+              <span>トイレを探す</span>
+            </button>
+            <button
+              onClick={() => handleInputChange('コンビニ')}
+              className={`${glassButtonStyle} flex-1 flex items-center justify-center gap-1`}
+            >
+              <span>🏪</span>
+              <span>コンビニを探す</span>
+            </button>
+          </div>
         </div>
 
         {/* Search Results */}
@@ -381,7 +415,9 @@ export function SearchPage() {
                 onClick={() => handleSelectSuggestion(suggestion)}
                 className="w-full px-4 py-3 text-left border-b border-gray-200/50 last:border-b-0 hover:bg-white/50 flex items-start gap-3"
               >
-                <span className="text-lg flex-shrink-0 mt-0.5">📍</span>
+                <span className="text-sm flex-shrink-0 mt-0.5 text-primary font-medium min-w-[3.5rem] text-right">
+                  {suggestion.distanceMeters ? formatDistance(suggestion.distanceMeters) : '📍'}
+                </span>
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-text text-sm">{suggestion.text}</p>
                   {suggestion.description && (
