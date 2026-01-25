@@ -99,8 +99,11 @@ export function PlacePage() {
             const parsed = parseAddress(geocodeResult.address);
             setAddress(parsed.address);
             setPostalCode(parsed.postalCode);
+
+            // placeNameも同様にパースして国名・郵便番号を除去
             if (geocodeResult.placeName) {
-              setName(geocodeResult.placeName);
+              const parsedName = parseAddress(geocodeResult.placeName);
+              setName(parsedName.address || parsed.address);
             }
           } else {
             setAddress(`${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`);
