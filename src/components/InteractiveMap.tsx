@@ -140,12 +140,13 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
       background: conic-gradient(
         from -22.5deg,
         transparent 0deg,
-        rgba(59, 130, 246, 0.35) 0deg,
-        rgba(59, 130, 246, 0.2) 22.5deg,
-        rgba(59, 130, 246, 0.2) 22.5deg,
-        rgba(59, 130, 246, 0.35) 45deg,
+        rgba(59, 130, 246, 0.4) 0deg,
+        rgba(59, 130, 246, 0.15) 22.5deg,
+        rgba(59, 130, 246, 0.15) 22.5deg,
+        rgba(59, 130, 246, 0.4) 45deg,
         transparent 45deg
       );
+      transform-origin: center center;
       opacity: 0;
       transition: opacity 0.3s ease-out;
       pointer-events: none;
@@ -326,6 +327,13 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
       mapElement.addEventListener('touchmove', handleTouchMove, { passive: true });
       mapElement.addEventListener('touchend', handleTouchEnd);
       mapElement.addEventListener('touchcancel', handleTouchEnd);
+
+      // Request orientation permission on first click (for iOS)
+      const handleFirstClick = () => {
+        requestOrientationPermission();
+        mapElement.removeEventListener('click', handleFirstClick);
+      };
+      mapElement.addEventListener('click', handleFirstClick);
     };
 
     initMap();
@@ -352,16 +360,10 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
           position: currentLocation,
           content,
         });
-
-        // Add smooth transition to marker element for smooth movement
-        requestAnimationFrame(() => {
-          const markerElement = currentLocationMarkerRef.current?.element;
-          if (markerElement) {
-            markerElement.style.transition = 'transform 0.5s ease-out';
-          }
-        });
+        // Note: Do NOT add CSS transition to marker element - it interferes with
+        // Google Maps' internal transform updates during zoom/pan
       } else {
-        // Update position - the CSS transition will smooth the movement
+        // Update position
         currentLocationMarkerRef.current.position = currentLocation;
       }
     };
@@ -371,17 +373,21 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
 
   // Update direction indicator rotation
   useEffect(() => {
-    if (!currentLocationMarkerRef.current || heading === null) return;
+    if (!currentLocationMarkerRef.current) return;
 
     const content = currentLocationMarkerRef.current.content as HTMLElement;
     const indicator = content?.querySelector('#direction-indicator') as HTMLElement;
 
-    if (indicator && hasOrientationSensor) {
-      // Rotate around center - the indicator is already positioned with left/top offset
-      // so we just need to rotate it
-      indicator.style.transform = `rotate(${heading}deg)`;
-      indicator.style.opacity = '1';
-      indicator.style.transition = 'transform 0.15s ease-out, opacity 0.3s ease-out';
+    if (indicator) {
+      if (heading !== null && hasOrientationSensor) {
+        // Show indicator and rotate to heading
+        // The rotation should be around the center of the element
+        indicator.style.transform = `rotate(${heading}deg)`;
+        indicator.style.opacity = '1';
+      } else {
+        // Hide indicator when no heading data
+        indicator.style.opacity = '0';
+      }
     }
   }, [heading, hasOrientationSensor]);
 
