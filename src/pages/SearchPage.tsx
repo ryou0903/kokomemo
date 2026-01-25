@@ -197,6 +197,54 @@ export function SearchPage() {
     }
   }, [query, showToast]);
 
+  // 検索実行関数（共通処理）
+  const executeSearch = useCallback(async (searchQuery: string) => {
+    if (!isReadyRef.current) {
+      setIsSearching(false);
+      return;
+    }
+
+    try {
+      const origin = mapPositionRef.current || undefined;
+
+      // 1. オートコンプリート取得
+      const predictions = await getPlacePredictionsRef.current(searchQuery, origin);
+      if (queryRef.current !== searchQuery) return;
+
+      // 2. 周辺検索（現在地がある場合のみ）
+      let nearbyResults: NearbyPlaceResult[] = [];
+      if (origin && GOOGLE_MAPS_API_KEY) {
+        nearbyResults = await searchNearbyPlaces(searchQuery, origin, GOOGLE_MAPS_API_KEY);
+      }
+      if (queryRef.current !== searchQuery) return;
+
+      // 3. マージ（周辺検索を優先、重複排除）
+      const nearbyIds = new Set(nearbyResults.map(r => r.placeId));
+      const nearbySuggestions: Suggestion[] = nearbyResults.map(r => ({
+        text: r.name,
+        description: r.address,
+        placeId: r.placeId,
+        distanceMeters: r.distanceMeters,
+      }));
+      const placeSuggestions: Suggestion[] = predictions
+        .filter(p => !nearbyIds.has(p.place_id))
+        .map((p) => ({
+          text: p.structured_formatting.main_text,
+          description: p.structured_formatting.secondary_text,
+          placeId: p.place_id,
+          distanceMeters: p.distance_meters,
+        }));
+
+      // 4. 周辺検索結果を先頭に、その後にオートコンプリート結果
+      setSuggestions([...nearbySuggestions, ...placeSuggestions]);
+    } catch (error) {
+      console.error('Place search error:', error);
+      setSuggestions([]);
+    } finally {
+      setIsSearching(false);
+    }
+  }, []);
+
   // Handle input change with debounce
   const handleInputChange = (value: string) => {
     setQuery(value);
@@ -213,53 +261,24 @@ export function SearchPage() {
     }
 
     setIsSearching(true);
-    debounceRef.current = window.setTimeout(async () => {
-      if (!isReadyRef.current) {
-        setIsSearching(false);
-        return;
-      }
-
-      try {
-        const origin = mapPositionRef.current || undefined;
-
-        // 1. オートコンプリート取得
-        const predictions = await getPlacePredictionsRef.current(value, origin);
-        if (queryRef.current !== value) return;
-
-        // 2. 周辺検索（現在地がある場合のみ）
-        let nearbyResults: NearbyPlaceResult[] = [];
-        if (origin && GOOGLE_MAPS_API_KEY) {
-          nearbyResults = await searchNearbyPlaces(value, origin, GOOGLE_MAPS_API_KEY);
-        }
-        if (queryRef.current !== value) return;
-
-        // 3. マージ（周辺検索を優先、重複排除）
-        const nearbyIds = new Set(nearbyResults.map(r => r.placeId));
-        const nearbySuggestions: Suggestion[] = nearbyResults.map(r => ({
-          text: r.name,
-          description: r.address,
-          placeId: r.placeId,
-          distanceMeters: r.distanceMeters,
-        }));
-        const placeSuggestions: Suggestion[] = predictions
-          .filter(p => !nearbyIds.has(p.place_id))
-          .map((p) => ({
-            text: p.structured_formatting.main_text,
-            description: p.structured_formatting.secondary_text,
-            placeId: p.place_id,
-            distanceMeters: p.distance_meters,
-          }));
-
-        // 4. 周辺検索結果を先頭に、その後にオートコンプリート結果
-        setSuggestions([...nearbySuggestions, ...placeSuggestions]);
-      } catch (error) {
-        console.error('Place search error:', error);
-        setSuggestions([]);
-      } finally {
-        setIsSearching(false);
-      }
+    debounceRef.current = window.setTimeout(() => {
+      executeSearch(value);
     }, 800);
   };
+
+  // クイック検索（即時実行、デバウンスなし）
+  const handleQuickSearch = useCallback((searchTerm: string) => {
+    setQuery(searchTerm);
+    setSelectedPlace(null);
+    setSuggestions([]);
+    setIsSearching(true);
+
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+    }
+
+    executeSearch(searchTerm);
+  }, [executeSearch]);
 
   // Handle suggestion selection
   const handleSelectSuggestion = async (suggestion: Suggestion) => {
@@ -327,8 +346,8 @@ export function SearchPage() {
 
   // Glass style classes
   const glassStyle = 'bg-white/80 backdrop-blur-xl shadow-lg border border-gray-200';
-  const glassButtonStyle = `${glassStyle} rounded-full px-2 py-0.5 text-sm font-medium text-text active:bg-white/90 transition-colors`;
-  const glassInputStyle = `${glassStyle} rounded-full px-3 py-1 text-base outline-none focus:ring-2 focus:ring-primary/30`;
+  const glassButtonStyle = `${glassStyle} rounded-full px-4 h-12 text-base font-medium text-text active:bg-white/90 transition-colors flex items-center justify-center`;
+  const glassInputStyle = `${glassStyle} rounded-full px-4 h-12 text-base outline-none focus:ring-2 focus:ring-primary/30`;
 
   return (
     <div className="fixed inset-0 bg-gray-200">
@@ -339,15 +358,14 @@ export function SearchPage() {
           longitude={selectedPlace?.longitude ?? mapPosition.lng}
           isLoaded={isLoaded}
           onLocationChange={(lat, lng, address, name) => {
-            if (selectedPlace) {
-              setSelectedPlace({
-                ...selectedPlace,
-                latitude: lat,
-                longitude: lng,
-                address: address,
-                name: name || address.split(',')[0] || selectedPlace.name,
-              });
-            }
+            // ピンを刺した時は常にモーダルを表示
+            setSelectedPlace({
+              placeId: `pin-${Date.now()}`,
+              name: name || address.split(',')[0] || '選択した場所',
+              address: address,
+              latitude: lat,
+              longitude: lng,
+            });
           }}
         />
       )}
@@ -408,15 +426,15 @@ export function SearchPage() {
               <span>{isFixingTypos ? '修正中...' : '誤字修正'}</span>
             </button>
             <button
-              onClick={() => handleInputChange('トイレ')}
-              className={`${glassButtonStyle} flex items-center justify-center gap-1`}
+              onClick={() => handleQuickSearch('トイレ')}
+              className={`${glassButtonStyle} gap-1`}
             >
               <span>🚻</span>
               <span>トイレを探す</span>
             </button>
             <button
-              onClick={() => handleInputChange('コンビニ')}
-              className={`${glassButtonStyle} flex items-center justify-center gap-1`}
+              onClick={() => handleQuickSearch('コンビニ')}
+              className={`${glassButtonStyle} gap-1`}
             >
               <span>🏪</span>
               <span>コンビニを探す</span>

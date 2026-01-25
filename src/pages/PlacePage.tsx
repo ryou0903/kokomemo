@@ -165,7 +165,6 @@ export function PlacePage() {
       <Header
         title={isNew ? '新しい場所を登録' : '場所を編集'}
         showBack
-        showHome
       />
 
       <main className="flex-1 px-4 py-6">
@@ -201,10 +200,9 @@ export function PlacePage() {
                   onClick={() => setTabId(tab.id)}
                   className={`
                     px-3 py-2 rounded-lg text-sm font-medium transition-all
-                    ${
-                      tabId === tab.id
-                        ? 'bg-primary text-white'
-                        : 'bg-white text-text border border-border hover:bg-gray-50'
+                    ${tabId === tab.id
+                      ? 'bg-primary text-white'
+                      : 'bg-white text-text border border-border hover:bg-gray-50'
                     }
                   `}
                 >

@@ -73,32 +73,27 @@ export function HomePage() {
     <div className="flex flex-col min-h-screen bg-background">
       <Header
         title="ここメモ"
-        rightAction={{
-          label: 'カレンダー',
-          icon: '📅',
-          onClick: () => navigate('/calendar'),
-        }}
       />
 
       <main className="flex-1 flex flex-col pb-6">
-        {/* Action Buttons Section */}
-        <div className="px-4 py-4 flex flex-col gap-3">
+        {/* Action Buttons Section - 横並び */}
+        <div className="px-4 py-4 flex gap-3">
           <Button
             variant="primary"
             size="large"
             icon="📍"
             onClick={() => navigate('/place/new?useCurrentLocation=true')}
-            className="w-full"
+            className="flex-1"
           >
             今いる場所を登録
           </Button>
 
           <Button
             variant="secondary"
-            size="normal"
+            size="large"
             icon="🗺️"
             onClick={() => navigate('/search')}
-            className="w-full"
+            className="flex-1"
           >
             場所を検索
           </Button>
@@ -107,28 +102,35 @@ export function HomePage() {
         {/* Places Section - Visually Grouped */}
         <div className="flex-1 mx-4 bg-surface rounded-2xl border border-border shadow-sm overflow-hidden flex flex-col">
           {/* Section Header */}
-          <div className="px-4 py-3 border-b border-border bg-gray-50/50">
+          <div className="px-4 py-3 border-b border-border bg-gray-50/50 flex items-center justify-between">
             <h2 className="text-base font-bold text-text">登録した場所</h2>
+            <button
+              onClick={() => navigate('/calendar')}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-full text-sm font-medium text-primary bg-primary/10 hover:bg-primary/20 active:bg-primary/30 transition-colors"
+            >
+              <span>📅</span>
+              <span>登録日で絞る</span>
+            </button>
           </div>
 
           {/* Category and Sort Selects */}
           <div className="px-4 py-3 border-b border-border flex gap-3">
             {/* Category Dropdown */}
-            <div className="flex-1">
+            <div className="flex-1 min-w-0">
               <select
                 value={activeTabId}
                 onChange={(e) => setActiveTabId(e.target.value)}
-                className="w-full px-3 py-2 text-base font-medium rounded-lg border border-border bg-white text-text cursor-pointer hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary/30"
+                className="w-full px-3 py-2 text-sm font-medium rounded-lg border border-border bg-white text-text cursor-pointer hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary/30 truncate"
               >
                 {tabs.map((tab) => (
                   <option key={tab.id} value={tab.id}>
-                    {tab.id === activeTabId ? `表示: ${tab.name}` : tab.name}
+                    {`表示: ${tab.name}`}
                   </option>
                 ))}
               </select>
             </div>
             {/* Sort Select */}
-            <div className="flex-1">
+            <div className="flex-1 min-w-0">
               <SortSelect value={sortOption} onChange={setSortOption} />
             </div>
           </div>
