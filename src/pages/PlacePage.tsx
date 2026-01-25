@@ -96,14 +96,19 @@ export function PlacePage() {
               location.longitude,
               GOOGLE_MAPS_API_KEY
             );
-            const parsed = parseAddress(geocodeResult.address);
-            setAddress(parsed.address);
-            setPostalCode(parsed.postalCode);
 
-            // placeNameも同様にパースして国名・郵便番号を除去
+            // 住所を設定
+            setAddress(geocodeResult.address);
+
+            // 郵便番号を設定（reverseGeocodeから直接取得）
+            if (geocodeResult.postalCode) {
+              setPostalCode(geocodeResult.postalCode);
+            }
+
+            // placeNameも国名・郵便番号を除去
             if (geocodeResult.placeName) {
               const parsedName = parseAddress(geocodeResult.placeName);
-              setName(parsedName.address || parsed.address);
+              setName(parsedName.address || geocodeResult.address);
             }
           } else {
             setAddress(`${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`);

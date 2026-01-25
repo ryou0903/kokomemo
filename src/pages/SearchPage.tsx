@@ -62,29 +62,31 @@ export function SearchPage() {
   // Get current location on mount with timeout fallback
   useEffect(() => {
     let isMounted = true;
+    let positionSet = false;
 
-    // すぐにデフォルト位置をセット（ローディング表示を短くする）
+    // 3秒でタイムアウト - デフォルト位置を使用
     const timeoutId = setTimeout(() => {
-      if (isMounted && !mapPosition) {
+      if (isMounted && !positionSet) {
+        positionSet = true;
         setMapPosition(DEFAULT_POSITION);
         setIsLoadingInitialLocation(false);
       }
-    }, 3000); // 3秒でタイムアウト
+    }, 3000);
 
     getCurrentLocation()
       .then((loc) => {
-        if (isMounted) {
+        if (isMounted && !positionSet) {
+          positionSet = true;
           setMapPosition({ lat: loc.latitude, lng: loc.longitude });
+          clearTimeout(timeoutId);
+          setIsLoadingInitialLocation(false);
         }
       })
       .catch(() => {
         // Use default position if location access denied
-        if (isMounted) {
+        if (isMounted && !positionSet) {
+          positionSet = true;
           setMapPosition(DEFAULT_POSITION);
-        }
-      })
-      .finally(() => {
-        if (isMounted) {
           clearTimeout(timeoutId);
           setIsLoadingInitialLocation(false);
         }
