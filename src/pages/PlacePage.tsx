@@ -15,6 +15,27 @@ import { useToast } from '../contexts/ToastContext';
 
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
 
+// 住所から国名を削除し、郵便番号を分離
+const parseAddress = (fullAddress: string): { address: string; postalCode: string } => {
+  let address = fullAddress;
+  let postalCode = '';
+
+  // 郵便番号を抽出（日本形式: 〒XXX-XXXX または XXX-XXXX）
+  const postalMatch = address.match(/〒?\s*(\d{3}-?\d{4})/);
+  if (postalMatch) {
+    postalCode = postalMatch[1].includes('-') ? postalMatch[1] : postalMatch[1].slice(0, 3) + '-' + postalMatch[1].slice(3);
+    address = address.replace(postalMatch[0], '').trim();
+  }
+
+  // 国名を削除（日本、Japan、JPなど）
+  address = address.replace(/^(日本、?|Japan,?\s*)/i, '').trim();
+
+  // 先頭のカンマやスペースを削除
+  address = address.replace(/^[,、\s]+/, '').trim();
+
+  return { address, postalCode };
+};
+
 export function PlacePage() {
   const { id } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
@@ -38,6 +59,7 @@ export function PlacePage() {
   const [name, setName] = useState('');
   const [memo, setMemo] = useState('');
   const [address, setAddress] = useState('');
+  const [postalCode, setPostalCode] = useState('');
   const [latitude, setLatitude] = useState(0);
   const [longitude, setLongitude] = useState(0);
   const [tabId, setTabId] = useState('frequent');
@@ -74,7 +96,9 @@ export function PlacePage() {
               location.longitude,
               GOOGLE_MAPS_API_KEY
             );
-            setAddress(geocodeResult.address);
+            const parsed = parseAddress(geocodeResult.address);
+            setAddress(parsed.address);
+            setPostalCode(parsed.postalCode);
             if (geocodeResult.placeName) {
               setName(geocodeResult.placeName);
             }
@@ -90,7 +114,11 @@ export function PlacePage() {
       } else if (isNew && prefillName && prefillLat && prefillLng) {
         // Pre-filled from search
         setName(prefillName);
-        setAddress(prefillAddress || '');
+        if (prefillAddress) {
+          const parsed = parseAddress(prefillAddress);
+          setAddress(parsed.address);
+          setPostalCode(parsed.postalCode);
+        }
         setLatitude(parseFloat(prefillLat));
         setLongitude(parseFloat(prefillLng));
       }
@@ -183,6 +211,22 @@ export function PlacePage() {
             error={errors.name}
           />
 
+          {/* 住所 */}
+          <Input
+            label="住所"
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
+            placeholder="例: 千葉県大網白里市永田186-5"
+          />
+
+          {/* 郵便番号 */}
+          <Input
+            label="郵便番号"
+            value={postalCode}
+            onChange={(e) => setPostalCode(e.target.value)}
+            placeholder="例: 299-3233"
+          />
+
           <Textarea
             label="メモ（任意）"
             value={memo}
@@ -211,15 +255,6 @@ export function PlacePage() {
               ))}
             </div>
           </div>
-
-          {address && (
-            <div className="flex flex-col gap-2">
-              <p className="text-base font-bold text-text">住所</p>
-              <p className="text-sm text-text-secondary bg-gray-50 rounded-lg px-3 py-2">
-                {address}
-              </p>
-            </div>
-          )}
 
           {/* Action Buttons */}
           <div className="mt-4 flex gap-3">

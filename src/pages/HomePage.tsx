@@ -77,25 +77,23 @@ export function HomePage() {
 
       <main className="flex-1 flex flex-col pb-6">
         {/* Action Buttons Section - 横並び */}
-        <div className="px-4 py-4 flex gap-3">
+        <div className="px-4 py-3 flex gap-2">
           <Button
             variant="primary"
-            size="large"
-            icon="📍"
+            size="normal"
             onClick={() => navigate('/place/new?useCurrentLocation=true')}
-            className="flex-1"
+            className="flex-1 whitespace-nowrap text-sm"
           >
-            今いる場所を登録
+            📍 今いる場所を登録
           </Button>
 
           <Button
             variant="secondary"
-            size="large"
-            icon="🗺️"
+            size="normal"
             onClick={() => navigate('/search')}
-            className="flex-1"
+            className="flex-1 whitespace-nowrap text-sm"
           >
-            場所を検索
+            🗺️ 場所を検索
           </Button>
         </div>
 
