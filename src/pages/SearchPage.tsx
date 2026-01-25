@@ -1,15 +1,16 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Header } from '../components/layout/Header';
-import { Button, Input } from '../components/ui';
 import { InteractiveMap } from '../components/InteractiveMap';
 import { useGoogleMaps, usePlacesAutocomplete } from '../hooks/useGoogleMaps';
-import { openNavigation } from '../lib/maps';
+import { openNavigation, getCurrentLocation } from '../lib/maps';
 import { savePlace, getSettings, addSearchHistory } from '../lib/storage';
 import { useToast } from '../contexts/ToastContext';
 
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || '';
+
+// Default position (Tokyo Station)
+const DEFAULT_POSITION = { lat: 35.6812, lng: 139.7671 };
 
 interface PlaceResult {
   placeId: string;
@@ -36,6 +37,7 @@ export function SearchPage() {
   const [isFixingTypos, setIsFixingTypos] = useState(false);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [selectedPlace, setSelectedPlace] = useState<PlaceResult | null>(null);
+  const [mapPosition, setMapPosition] = useState(DEFAULT_POSITION);
 
   const { isLoaded, loadError } = useGoogleMaps({ apiKey: GOOGLE_MAPS_API_KEY });
   const { getPlacePredictions, getPlaceDetails, isReady } = usePlacesAutocomplete(isLoaded);
@@ -44,6 +46,17 @@ export function SearchPage() {
   const queryRef = useRef(query);
   const isReadyRef = useRef(isReady);
   const getPlacePredictionsRef = useRef(getPlacePredictions);
+
+  // Get current location on mount
+  useEffect(() => {
+    getCurrentLocation()
+      .then((loc) => {
+        setMapPosition({ lat: loc.latitude, lng: loc.longitude });
+      })
+      .catch(() => {
+        // Use default position if location access denied
+      });
+  }, []);
 
   // Keep refs in sync
   useEffect(() => {
@@ -58,7 +71,6 @@ export function SearchPage() {
     getPlacePredictionsRef.current = getPlacePredictions;
   }, [getPlacePredictions]);
 
-  // Debug: log when services are ready
   useEffect(() => {
     if (loadError) {
       console.error('Google Maps load error:', loadError);
@@ -152,6 +164,7 @@ export function SearchPage() {
 
       if (correctedText && correctedText !== query) {
         setQuery(correctedText);
+        handleInputChange(correctedText);
         showToast('誤字を修正しました');
       } else {
         showToast('修正の必要はありませんでした', 'info');
@@ -164,7 +177,7 @@ export function SearchPage() {
     }
   }, [query, showToast]);
 
-  // Handle input change with debounce - inline search to avoid stale closure
+  // Handle input change with debounce
   const handleInputChange = (value: string) => {
     setQuery(value);
     setSelectedPlace(null);
@@ -181,7 +194,6 @@ export function SearchPage() {
 
     setIsSearching(true);
     debounceRef.current = window.setTimeout(async () => {
-      // Check if API is ready using ref to get latest value
       if (!isReadyRef.current) {
         setIsSearching(false);
         return;
@@ -189,7 +201,6 @@ export function SearchPage() {
 
       try {
         const predictions = await getPlacePredictionsRef.current(value);
-        // Check if query is still the same (user might have typed more)
         if (queryRef.current !== value) return;
 
         const placeSuggestions: Suggestion[] = predictions.map((p) => ({
@@ -210,6 +221,7 @@ export function SearchPage() {
   // Handle suggestion selection
   const handleSelectSuggestion = async (suggestion: Suggestion) => {
     setIsSearching(true);
+    setSuggestions([]);
     try {
       const placeDetails = await getPlaceDetails(suggestion.placeId);
       if (placeDetails && placeDetails.geometry?.location) {
@@ -222,7 +234,8 @@ export function SearchPage() {
         };
         addSearchHistory(suggestion.text, suggestion.placeId);
         setSelectedPlace(place);
-        setSuggestions([]);
+        setMapPosition({ lat: place.latitude, lng: place.longitude });
+        setQuery('');
       }
     } catch (error) {
       console.error('Failed to get place details:', error);
@@ -266,196 +279,156 @@ export function SearchPage() {
     navigate('/');
   };
 
-  // Focus input on mount
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
-
   const hasGoogleApi = !!GOOGLE_MAPS_API_KEY;
   const hasGeminiApi = !!GEMINI_API_KEY;
 
-  return (
-    <div className="flex flex-col min-h-screen bg-background">
-      <Header title="場所を検索" showBack showHome />
+  // Glass style classes
+  const glassStyle = 'bg-white/85 backdrop-blur-xl shadow-lg';
+  const glassButtonStyle = `${glassStyle} rounded-full px-3 py-1.5 text-sm font-medium text-text active:bg-white/95 transition-colors`;
+  const glassInputStyle = `${glassStyle} rounded-full px-4 py-1.5 text-base outline-none focus:ring-2 focus:ring-primary/30`;
 
-      <main className="flex-1 flex flex-col">
-        {/* Search Input Section */}
-        <div className="p-4 bg-surface border-b border-border">
-          <div className="flex flex-col gap-3">
-            <Input
+  return (
+    <div className="fixed inset-0 bg-gray-200">
+      {/* Full-screen Map */}
+      {hasGoogleApi && (
+        <InteractiveMap
+          latitude={selectedPlace?.latitude ?? mapPosition.lat}
+          longitude={selectedPlace?.longitude ?? mapPosition.lng}
+          isLoaded={isLoaded}
+          onLocationChange={(lat, lng, address, name) => {
+            if (selectedPlace) {
+              setSelectedPlace({
+                ...selectedPlace,
+                latitude: lat,
+                longitude: lng,
+                address: address,
+                name: name || address.split(',')[0] || selectedPlace.name,
+              });
+            }
+          }}
+        />
+      )}
+
+      {/* Floating UI - Top */}
+      <div className="absolute top-0 left-0 right-0 pt-safe p-3 pointer-events-none">
+        <div className="pointer-events-auto">
+          {/* Row 1: Back button + Search input */}
+          <div className="flex gap-2 items-center">
+            <button
+              onClick={() => navigate(-1)}
+              className={glassButtonStyle}
+            >
+              戻る
+            </button>
+            <input
               ref={inputRef}
               type="search"
-              placeholder={hasGoogleApi ? "住所や建物の名前を入力" : "APIキー未設定"}
+              placeholder="場所を検索"
               value={query}
               onChange={(e) => handleInputChange(e.target.value)}
               disabled={!hasGoogleApi}
+              className={`${glassInputStyle} flex-1 min-w-0`}
             />
-
-            <div className="flex gap-2">
-              <Button
-                variant="secondary"
-                size="small"
-                icon="🎤"
-                onClick={startVoiceInput}
-                disabled={isListening}
-                className="flex-1"
-              >
-                {isListening ? '聞いています...' : '音声で入力'}
-              </Button>
-              <Button
-                variant="secondary"
-                size="small"
-                icon="✨"
-                onClick={fixTypos}
-                disabled={!query.trim() || isFixingTypos || !hasGeminiApi}
-                className="flex-1"
-              >
-                {isFixingTypos ? '修正中...' : '誤字を修正'}
-              </Button>
-            </div>
-
-            {!hasGeminiApi && (
-              <p className="text-xs text-text-secondary text-center">
-                ※ 誤字修正にはGemini APIキーの設定が必要です
-              </p>
+            {isSearching && (
+              <div className={`${glassStyle} rounded-full p-2`}>
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+              </div>
             )}
+          </div>
+
+          {/* Row 2: Voice input + Typo fix buttons */}
+          <div className="flex gap-2 mt-2">
+            <button
+              onClick={startVoiceInput}
+              disabled={isListening}
+              className={`${glassButtonStyle} flex-1 flex items-center justify-center gap-1`}
+            >
+              <span>🎤</span>
+              <span>{isListening ? '聞いています...' : '音声入力'}</span>
+            </button>
+            <button
+              onClick={fixTypos}
+              disabled={!query.trim() || isFixingTypos || !hasGeminiApi}
+              className={`${glassButtonStyle} flex-1 flex items-center justify-center gap-1 disabled:opacity-50`}
+            >
+              <span>✨</span>
+              <span>{isFixingTypos ? '修正中...' : '誤字修正'}</span>
+            </button>
           </div>
         </div>
 
-        {/* Loading Indicator */}
-        {isSearching && (
-          <div className="p-4 flex justify-center">
-            <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-          </div>
-        )}
-
         {/* Search Results */}
-        {!selectedPlace && suggestions.length > 0 && (
-          <div className="flex-1 overflow-y-auto">
+        {suggestions.length > 0 && (
+          <div className={`${glassStyle} rounded-2xl mt-2 max-h-60 overflow-y-auto pointer-events-auto`}>
             {suggestions.map((suggestion) => (
               <button
                 key={suggestion.placeId}
                 onClick={() => handleSelectSuggestion(suggestion)}
-                className="w-full px-4 py-3 text-left border-b border-border hover:bg-gray-50 flex items-start gap-3"
+                className="w-full px-4 py-3 text-left border-b border-gray-200/50 last:border-b-0 hover:bg-white/50 flex items-start gap-3"
               >
-                <span className="text-xl flex-shrink-0 mt-0.5">📍</span>
+                <span className="text-lg flex-shrink-0 mt-0.5">📍</span>
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium text-text">{suggestion.text}</p>
+                  <p className="font-medium text-text text-sm">{suggestion.text}</p>
                   {suggestion.description && (
-                    <p className="text-sm text-text-secondary truncate">{suggestion.description}</p>
+                    <p className="text-xs text-text-secondary truncate">{suggestion.description}</p>
                   )}
                 </div>
               </button>
             ))}
           </div>
         )}
+      </div>
 
-        {/* Selected Place */}
-        {selectedPlace && (
-          <div className="flex-1 flex flex-col">
-            {/* Interactive Map Preview */}
-            <div className="h-64 bg-gray-200 relative">
-              {hasGoogleApi ? (
-                <InteractiveMap
-                  latitude={selectedPlace.latitude}
-                  longitude={selectedPlace.longitude}
-                  isLoaded={isLoaded}
-                  onLocationChange={(lat, lng, address, name) => {
-                    setSelectedPlace({
-                      ...selectedPlace,
-                      latitude: lat,
-                      longitude: lng,
-                      address: address,
-                      name: name || address.split(',')[0] || selectedPlace.name,
-                    });
-                  }}
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-text-secondary">
-                  地図を表示するにはAPIキーが必要です
-                </div>
-              )}
-            </div>
-
-            {/* Place Details */}
-            <div className="p-4 bg-surface border-b border-border">
-              <h2 className="text-lg font-bold text-text mb-1">{selectedPlace.name}</h2>
-              <p className="text-sm text-text-secondary">{selectedPlace.address}</p>
-            </div>
-
-            {/* Actions */}
-            <div className="p-4 flex flex-col gap-3">
-              <Button
-                variant="primary"
-                size="normal"
-                icon="📍"
-                onClick={handleRegister}
-                className="w-full"
-              >
-                この場所を登録
-              </Button>
-              <Button
-                variant="secondary"
-                size="normal"
-                icon="🚗"
-                onClick={handleNavigate}
-                className="w-full"
-              >
-                ナビを開始
-              </Button>
-              <Button
-                variant="ghost"
-                size="small"
-                onClick={handleBoth}
-                className="w-full"
-              >
-                登録してナビを開始
-              </Button>
-              <Button
-                variant="ghost"
-                size="small"
-                onClick={() => setSelectedPlace(null)}
-                className="w-full"
-              >
-                検索に戻る
-              </Button>
-            </div>
+      {/* Selected Place - Bottom Panel */}
+      {selectedPlace && (
+        <div className={`absolute bottom-0 left-0 right-0 ${glassStyle} rounded-t-3xl p-4 pb-safe pointer-events-auto`}>
+          <div className="mb-3">
+            <h2 className="text-lg font-bold text-text">{selectedPlace.name}</h2>
+            <p className="text-sm text-text-secondary">{selectedPlace.address}</p>
           </div>
-        )}
 
-        {/* Empty State - positioned at top for keyboard visibility */}
-        {!isSearching && !selectedPlace && suggestions.length === 0 && query.length === 0 && (
-          <div className="pt-12 pb-8 px-8 text-center">
-            <p className="text-4xl mb-3">🔍</p>
-            <p className="text-base text-text-secondary">
-              住所や建物の名前を入力して
-              <br />
-              場所を検索してください
-            </p>
+          <div className="flex gap-2">
+            <button
+              onClick={handleRegister}
+              className="flex-1 bg-primary text-white rounded-full py-2.5 px-4 font-medium text-sm flex items-center justify-center gap-1 active:bg-primary/90"
+            >
+              <span>📍</span>
+              <span>登録</span>
+            </button>
+            <button
+              onClick={handleNavigate}
+              className="flex-1 bg-white border border-border text-text rounded-full py-2.5 px-4 font-medium text-sm flex items-center justify-center gap-1 active:bg-gray-50"
+            >
+              <span>🚗</span>
+              <span>ナビ</span>
+            </button>
           </div>
-        )}
 
-        {/* No Results - positioned at top for keyboard visibility */}
-        {!isSearching && !selectedPlace && suggestions.length === 0 && query.length > 0 && (
-          <div className="pt-12 pb-8 px-8 text-center">
-            <p className="text-4xl mb-3">🤔</p>
-            <p className="text-base text-text-secondary">
-              「{query}」に一致する場所が見つかりませんでした
-            </p>
-            {hasGeminiApi && (
-              <Button
-                variant="secondary"
-                size="small"
-                icon="✨"
-                onClick={fixTypos}
-                className="mt-4"
-              >
-                誤字を修正して再検索
-              </Button>
-            )}
+          <div className="flex gap-2 mt-2">
+            <button
+              onClick={handleBoth}
+              className="flex-1 text-text-secondary text-sm py-2 active:bg-gray-100 rounded-full"
+            >
+              登録してナビ開始
+            </button>
+            <button
+              onClick={() => setSelectedPlace(null)}
+              className="flex-1 text-text-secondary text-sm py-2 active:bg-gray-100 rounded-full"
+            >
+              キャンセル
+            </button>
           </div>
-        )}
-      </main>
+        </div>
+      )}
+
+      {/* API Key missing message */}
+      {!hasGoogleApi && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className={`${glassStyle} rounded-2xl p-6 mx-4 text-center`}>
+            <p className="text-text-secondary">Google Maps APIキーが設定されていません</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
