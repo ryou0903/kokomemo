@@ -199,6 +199,148 @@ export interface NearbyPlaceResult {
   distanceMeters: number;
 }
 
+// オートコンプリート結果の型
+export interface AutocompleteResult {
+  placeId: string;
+  mainText: string;
+  secondaryText: string;
+  distanceMeters?: number;
+}
+
+// REST APIベースのオートコンプリート（JavaScript APIが動作しない古いデバイス用）
+export async function searchAutocomplete(
+  input: string,
+  apiKey: string,
+  location?: { lat: number; lng: number }
+): Promise<AutocompleteResult[]> {
+  if (!input.trim() || typeof fetch === 'undefined') {
+    return [];
+  }
+
+  const url = 'https://places.googleapis.com/v1/places:autocomplete';
+
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timeoutId = controller ? setTimeout(() => controller.abort(), 5000) : null;
+
+  try {
+    const requestBody: any = {
+      input,
+      languageCode: 'ja',
+      regionCode: 'JP',
+    };
+
+    // 現在地がある場合はlocationBiasを追加
+    if (location) {
+      requestBody.locationBias = {
+        circle: {
+          center: { latitude: location.lat, longitude: location.lng },
+          radius: 50000 // 50km
+        }
+      };
+    }
+
+    const fetchOptions: RequestInit = {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': apiKey,
+      },
+      body: JSON.stringify(requestBody)
+    };
+
+    if (controller) {
+      fetchOptions.signal = controller.signal;
+    }
+
+    const response = await fetch(url, fetchOptions);
+
+    if (timeoutId) clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      console.warn('Autocomplete API error:', response.status, response.statusText);
+      return [];
+    }
+
+    const data = await response.json();
+
+    if (!data.suggestions) return [];
+
+    return data.suggestions
+      .filter((s: any) => s.placePrediction)
+      .map((s: any) => {
+        const prediction = s.placePrediction;
+        return {
+          placeId: prediction.placeId,
+          mainText: prediction.structuredFormat?.mainText?.text || prediction.text?.text || '',
+          secondaryText: prediction.structuredFormat?.secondaryText?.text || '',
+          distanceMeters: prediction.distanceMeters,
+        };
+      });
+  } catch (error) {
+    if (timeoutId) clearTimeout(timeoutId);
+    if (error instanceof Error && error.name === 'AbortError') {
+      console.warn('Autocomplete timed out');
+    } else {
+      console.warn('Autocomplete error:', error);
+    }
+    return [];
+  }
+}
+
+// REST APIベースの場所詳細取得
+export async function getPlaceDetailsRest(
+  placeId: string,
+  apiKey: string
+): Promise<PlaceSearchResult | null> {
+  if (!placeId || typeof fetch === 'undefined') {
+    return null;
+  }
+
+  // placeIdがplaces/で始まる場合はそのまま、そうでなければ追加
+  const fullPlaceId = placeId.startsWith('places/') ? placeId : `places/${placeId}`;
+  const url = `https://places.googleapis.com/v1/${fullPlaceId}`;
+
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timeoutId = controller ? setTimeout(() => controller.abort(), 5000) : null;
+
+  try {
+    const fetchOptions: RequestInit = {
+      method: 'GET',
+      headers: {
+        'X-Goog-Api-Key': apiKey,
+        'X-Goog-FieldMask': 'id,displayName,formattedAddress,location',
+      },
+    };
+
+    if (controller) {
+      fetchOptions.signal = controller.signal;
+    }
+
+    const response = await fetch(url, fetchOptions);
+
+    if (timeoutId) clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      console.warn('Place details API error:', response.status, response.statusText);
+      return null;
+    }
+
+    const data = await response.json();
+
+    return {
+      placeId: data.id || placeId,
+      name: data.displayName?.text || '',
+      address: data.formattedAddress || '',
+      latitude: data.location?.latitude || 0,
+      longitude: data.location?.longitude || 0,
+    };
+  } catch (error) {
+    if (timeoutId) clearTimeout(timeoutId);
+    console.warn('Place details error:', error);
+    return null;
+  }
+}
+
 // 距離計算関数（Haversine formula）
 function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371000; // 地球の半径（メートル）
