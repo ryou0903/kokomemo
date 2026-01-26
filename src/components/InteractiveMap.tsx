@@ -10,17 +10,21 @@ interface InteractiveMapProps {
   isLoaded: boolean;
 }
 
+// マーカー型の統一（Advanced または Legacy）
+type MarkerType = google.maps.marker.AdvancedMarkerElement | google.maps.Marker;
+
 export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded }: InteractiveMapProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<google.maps.Map | null>(null);
-  const markerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null);
-  const currentLocationMarkerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null);
+  const markerRef = useRef<MarkerType | null>(null);
+  const currentLocationMarkerRef = useRef<MarkerType | null>(null);
   const longPressTimerRef = useRef<number | null>(null);
   const watchIdRef = useRef<number | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const [isLoadingLocation, setIsLoadingLocation] = useState(false);
   const isInitializedRef = useRef(false);
   const hasInitialPanRef = useRef(false);
+  const isLegacyModeRef = useRef(false); // レガシーモードフラグ
 
   // Current location state
   const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
@@ -180,7 +184,7 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
     }
   }, []);
 
-  // Create current location marker element
+  // Create current location marker element (for Advanced Marker)
   const createCurrentLocationMarkerContent = useCallback(() => {
     // Container with 0 size - elements are positioned absolutely from center
     // This prevents zoom drift issues
@@ -253,6 +257,41 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
     return container;
   }, []);
 
+  // レガシーモード用の青い丸アイコン
+  const getLegacyCurrentLocationIcon = useCallback((): google.maps.Symbol => {
+    return {
+      path: google.maps.SymbolPath.CIRCLE,
+      scale: 10,
+      fillColor: '#4285F4',
+      fillOpacity: 1,
+      strokeColor: 'white',
+      strokeWeight: 3,
+    };
+  }, []);
+
+  // マーカーの位置を更新するヘルパー関数
+  const updateMarkerPosition = useCallback((marker: MarkerType, position: { lat: number; lng: number }) => {
+    if ('position' in marker && typeof marker.position !== 'function') {
+      // AdvancedMarkerElement
+      (marker as google.maps.marker.AdvancedMarkerElement).position = position;
+    } else {
+      // Legacy Marker
+      (marker as google.maps.Marker).setPosition(position);
+    }
+  }, []);
+
+  // マーカーの現在位置を取得するヘルパー関数
+  const getMarkerPosition = useCallback((marker: MarkerType): google.maps.LatLngLiteral | null => {
+    if ('position' in marker && typeof marker.position !== 'function') {
+      // AdvancedMarkerElement
+      return (marker as google.maps.marker.AdvancedMarkerElement).position as google.maps.LatLngLiteral;
+    } else {
+      // Legacy Marker
+      const pos = (marker as google.maps.Marker).getPosition();
+      return pos ? { lat: pos.lat(), lng: pos.lng() } : null;
+    }
+  }, []);
+
   // Initialize map only once
   useEffect(() => {
     if (!isLoaded || !mapRef.current || !window.google || isInitializedRef.current) return;
@@ -261,45 +300,98 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
 
     const initMap = async () => {
       const { Map } = await google.maps.importLibrary('maps') as google.maps.MapsLibrary;
-      const { AdvancedMarkerElement } = await google.maps.importLibrary('marker') as google.maps.MarkerLibrary;
-
       const initialPos = initialPositionRef.current;
 
-      const map = new Map(mapRef.current!, {
+      // AdvancedMarkerElementが利用可能かチェック
+      let useAdvancedMarker = false;
+      let AdvancedMarkerElement: typeof google.maps.marker.AdvancedMarkerElement | null = null;
+
+      try {
+        const markerLib = await google.maps.importLibrary('marker') as google.maps.MarkerLibrary;
+        if (markerLib.AdvancedMarkerElement) {
+          AdvancedMarkerElement = markerLib.AdvancedMarkerElement;
+          useAdvancedMarker = true;
+        }
+      } catch (error) {
+        console.warn('AdvancedMarkerElement not available, using legacy mode:', error);
+        useAdvancedMarker = false;
+      }
+
+      isLegacyModeRef.current = !useAdvancedMarker;
+
+      // 地図オプション（レガシーモードではmapIdを外す）
+      const mapOptions: google.maps.MapOptions = {
         center: { lat: initialPos.lat, lng: initialPos.lng },
         zoom: 16,
-        mapId: 'kokomemo-map',
         disableDefaultUI: true,
         zoomControl: true,
         gestureHandling: 'greedy',
-      });
+      };
 
-      // Red pin marker (for place selection)
-      const marker = new AdvancedMarkerElement({
-        map,
-        position: { lat: initialPos.lat, lng: initialPos.lng },
-        gmpDraggable: true,
-      });
+      // Advanced Marker使用時のみmapIdを設定
+      if (useAdvancedMarker) {
+        mapOptions.mapId = 'kokomemo-map';
+      }
 
+      const map = new Map(mapRef.current!, mapOptions);
       mapInstanceRef.current = map;
-      markerRef.current = marker;
 
-      // Handle marker drag end
-      marker.addListener('dragend', async () => {
-        const position = marker.position as google.maps.LatLngLiteral;
-        if (position && onLocationChangeRef.current) {
-          setIsLoadingLocation(true);
-          try {
-            const result = await reverseGeocode(position.lat, position.lng, GOOGLE_MAPS_API_KEY);
-            onLocationChangeRef.current(position.lat, position.lng, result.address, result.placeName);
-          } catch (error) {
-            console.error('Reverse geocode error:', error);
-            onLocationChangeRef.current(position.lat, position.lng, `${position.lat.toFixed(6)}, ${position.lng.toFixed(6)}`);
-          } finally {
-            setIsLoadingLocation(false);
+      // マーカーの作成（モードに応じて分岐）
+      let marker: MarkerType;
+
+      if (useAdvancedMarker && AdvancedMarkerElement) {
+        // Advanced Marker モード
+        marker = new AdvancedMarkerElement({
+          map,
+          position: { lat: initialPos.lat, lng: initialPos.lng },
+          gmpDraggable: true,
+        });
+
+        // Handle marker drag end (Advanced)
+        marker.addListener('dragend', async () => {
+          const position = (marker as google.maps.marker.AdvancedMarkerElement).position as google.maps.LatLngLiteral;
+          if (position && onLocationChangeRef.current) {
+            setIsLoadingLocation(true);
+            try {
+              const result = await reverseGeocode(position.lat, position.lng, GOOGLE_MAPS_API_KEY);
+              onLocationChangeRef.current(position.lat, position.lng, result.address, result.placeName);
+            } catch (error) {
+              console.error('Reverse geocode error:', error);
+              onLocationChangeRef.current(position.lat, position.lng, `${position.lat.toFixed(6)}, ${position.lng.toFixed(6)}`);
+            } finally {
+              setIsLoadingLocation(false);
+            }
           }
-        }
-      });
+        });
+      } else {
+        // Legacy Marker モード
+        marker = new google.maps.Marker({
+          map,
+          position: { lat: initialPos.lat, lng: initialPos.lng },
+          draggable: true,
+        });
+
+        // Handle marker drag end (Legacy)
+        marker.addListener('dragend', async () => {
+          const position = (marker as google.maps.Marker).getPosition();
+          if (position && onLocationChangeRef.current) {
+            const lat = position.lat();
+            const lng = position.lng();
+            setIsLoadingLocation(true);
+            try {
+              const result = await reverseGeocode(lat, lng, GOOGLE_MAPS_API_KEY);
+              onLocationChangeRef.current(lat, lng, result.address, result.placeName);
+            } catch (error) {
+              console.error('Reverse geocode error:', error);
+              onLocationChangeRef.current(lat, lng, `${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+            } finally {
+              setIsLoadingLocation(false);
+            }
+          }
+        });
+      }
+
+      markerRef.current = marker;
 
       // Handle long press using map click event
       let pressStartPos = { x: 0, y: 0 };
@@ -370,7 +462,7 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
           const lat = ne.lat() - (y / mapHeight) * (ne.lat() - sw.lat());
 
           // Move marker without panning
-          marker.position = { lat, lng };
+          updateMarkerPosition(marker, { lat, lng });
 
           // Get address
           if (onLocationChangeRef.current) {
@@ -410,37 +502,59 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
         clearTimeout(longPressTimerRef.current);
       }
     };
-  }, [isLoaded, requestOrientationPermission]);
+  }, [isLoaded, requestOrientationPermission, updateMarkerPosition]);
 
   // Create/update current location marker using smooth location
   useEffect(() => {
     if (!mapInstanceRef.current || !isInitializedRef.current || !smoothLocation) return;
 
-    const createMarker = async () => {
-      const { AdvancedMarkerElement } = await google.maps.importLibrary('marker') as google.maps.MarkerLibrary;
-
+    const createOrUpdateMarker = async () => {
       if (!currentLocationMarkerRef.current) {
-        // Create new marker
-        const content = createCurrentLocationMarkerContent();
-        currentLocationMarkerRef.current = new AdvancedMarkerElement({
-          map: mapInstanceRef.current!,
-          position: smoothLocation,
-          content,
-        });
+        // 新規作成
+        if (!isLegacyModeRef.current) {
+          // Advanced Marker モード
+          try {
+            const { AdvancedMarkerElement } = await google.maps.importLibrary('marker') as google.maps.MarkerLibrary;
+            const content = createCurrentLocationMarkerContent();
+            currentLocationMarkerRef.current = new AdvancedMarkerElement({
+              map: mapInstanceRef.current!,
+              position: smoothLocation,
+              content,
+            });
+          } catch (error) {
+            console.warn('Failed to create AdvancedMarker for current location, falling back:', error);
+            // フォールバックとしてLegacy Markerを使用
+            isLegacyModeRef.current = true;
+            currentLocationMarkerRef.current = new google.maps.Marker({
+              map: mapInstanceRef.current!,
+              position: smoothLocation,
+              icon: getLegacyCurrentLocationIcon(),
+            });
+          }
+        } else {
+          // Legacy Marker モード
+          currentLocationMarkerRef.current = new google.maps.Marker({
+            map: mapInstanceRef.current!,
+            position: smoothLocation,
+            icon: getLegacyCurrentLocationIcon(),
+          });
+        }
       } else {
-        // Update position with smooth interpolated value
-        currentLocationMarkerRef.current.position = smoothLocation;
+        // 位置更新
+        updateMarkerPosition(currentLocationMarkerRef.current, smoothLocation);
       }
     };
 
-    createMarker();
-  }, [smoothLocation, createCurrentLocationMarkerContent]);
+    createOrUpdateMarker();
+  }, [smoothLocation, createCurrentLocationMarkerContent, getLegacyCurrentLocationIcon, updateMarkerPosition]);
 
-  // Update direction indicator rotation
+  // Update direction indicator rotation (Advanced Marker only)
   useEffect(() => {
-    if (!currentLocationMarkerRef.current) return;
+    if (!currentLocationMarkerRef.current || isLegacyModeRef.current) return;
 
-    const content = currentLocationMarkerRef.current.content as HTMLElement;
+    // Advanced Marker のみ方向インジケーターを更新
+    const advancedMarker = currentLocationMarkerRef.current as google.maps.marker.AdvancedMarkerElement;
+    const content = advancedMarker.content as HTMLElement;
     const indicator = content?.querySelector('#direction-indicator') as HTMLElement;
 
     if (indicator) {
@@ -470,24 +584,24 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
     if (latDiff > 0.01 || lngDiff > 0.01) {
       hasInitialPanRef.current = true;
       mapInstanceRef.current.panTo({ lat: latitude, lng: longitude });
-      markerRef.current.position = { lat: latitude, lng: longitude };
+      updateMarkerPosition(markerRef.current, { lat: latitude, lng: longitude });
     }
-  }, [latitude, longitude]);
+  }, [latitude, longitude, updateMarkerPosition]);
 
   // Update marker position when props change (but don't pan map)
   useEffect(() => {
     if (markerRef.current && isInitializedRef.current) {
-      const currentPos = markerRef.current.position as google.maps.LatLngLiteral | null;
+      const currentPos = getMarkerPosition(markerRef.current);
       // Only update if position actually changed significantly (avoid floating point issues)
       if (currentPos) {
         const latDiff = Math.abs(currentPos.lat - latitude);
         const lngDiff = Math.abs(currentPos.lng - longitude);
         if (latDiff > 0.00001 || lngDiff > 0.00001) {
-          markerRef.current.position = { lat: latitude, lng: longitude };
+          updateMarkerPosition(markerRef.current, { lat: latitude, lng: longitude });
         }
       }
     }
-  }, [latitude, longitude]);
+  }, [latitude, longitude, updateMarkerPosition, getMarkerPosition]);
 
   if (!isLoaded) {
     return (
