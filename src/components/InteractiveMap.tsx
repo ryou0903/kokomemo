@@ -22,6 +22,7 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
   const watchIdRef = useRef<number | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const [isLoadingLocation, setIsLoadingLocation] = useState(false);
+  const [mapError, setMapError] = useState<string | null>(null);
   const isInitializedRef = useRef(false);
   const hasInitialPanRef = useRef(false);
   const isLegacyModeRef = useRef(false); // レガシーモードフラグ
@@ -302,36 +303,67 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
       const { Map } = await google.maps.importLibrary('maps') as google.maps.MapsLibrary;
       const initialPos = initialPositionRef.current;
 
-      // AdvancedMarkerElementが利用可能かチェック
+      // AdvancedMarkerElementが利用可能かチェック（実際にインスタンス化して確認）
       let useAdvancedMarker = false;
       let AdvancedMarkerElement: typeof google.maps.marker.AdvancedMarkerElement | null = null;
 
       try {
         const markerLib = await google.maps.importLibrary('marker') as google.maps.MarkerLibrary;
-        if (markerLib.AdvancedMarkerElement) {
-          AdvancedMarkerElement = markerLib.AdvancedMarkerElement;
-          useAdvancedMarker = true;
+        if (markerLib && markerLib.AdvancedMarkerElement) {
+          // クラスが存在しても実際に動くかテスト用マップで確認
+          const testDiv = document.createElement('div');
+          testDiv.style.cssText = 'position:absolute;width:1px;height:1px;left:-9999px;';
+          document.body.appendChild(testDiv);
+
+          try {
+            // テスト用のマップを作成（mapIdなし = ラスターマップ）
+            const testMap = new Map(testDiv, {
+              center: { lat: 0, lng: 0 },
+              zoom: 1,
+              disableDefaultUI: true,
+            });
+
+            // 実際にAdvancedMarkerElementをインスタンス化してみる
+            const testMarker = new markerLib.AdvancedMarkerElement({
+              map: testMap,
+              position: { lat: 0, lng: 0 },
+            });
+
+            // 成功したらクリーンアップ
+            testMarker.map = null;
+            document.body.removeChild(testDiv);
+
+            AdvancedMarkerElement = markerLib.AdvancedMarkerElement;
+            useAdvancedMarker = true;
+            console.log('AdvancedMarkerElement: 利用可能');
+          } catch (testError) {
+            // インスタンス化に失敗
+            document.body.removeChild(testDiv);
+            console.warn('AdvancedMarkerElement: インスタンス化に失敗、レガシーモードを使用:', testError);
+            useAdvancedMarker = false;
+          }
+        } else {
+          console.log('AdvancedMarkerElement: クラスが見つかりません、レガシーモードを使用');
         }
       } catch (error) {
-        console.warn('AdvancedMarkerElement not available, using legacy mode:', error);
+        console.warn('マーカーライブラリの読み込みに失敗、レガシーモードを使用:', error);
         useAdvancedMarker = false;
       }
 
       isLegacyModeRef.current = !useAdvancedMarker;
+      console.log('地図モード:', useAdvancedMarker ? 'Advanced (Vector)' : 'Legacy (Raster)');
 
-      // 地図オプション（レガシーモードではmapIdを外す）
+      // 地図オプション（スプレッド演算子でmapIdを条件付き追加）
       const mapOptions: google.maps.MapOptions = {
         center: { lat: initialPos.lat, lng: initialPos.lng },
         zoom: 16,
         disableDefaultUI: true,
         zoomControl: true,
         gestureHandling: 'greedy',
+        // AdvancedMarkerが使える場合のみmapIdをセット（ベクターマップ）
+        // レガシーモードではmapIdなし（ラスターマップ = 軽量）
+        ...(useAdvancedMarker ? { mapId: 'kokomemo-map' } : {}),
       };
-
-      // Advanced Marker使用時のみmapIdを設定
-      if (useAdvancedMarker) {
-        mapOptions.mapId = 'kokomemo-map';
-      }
 
       const map = new Map(mapRef.current!, mapOptions);
       mapInstanceRef.current = map;
@@ -495,7 +527,10 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
       mapElement.addEventListener('click', handleFirstClick);
     };
 
-    initMap();
+    initMap().catch((error) => {
+      console.error('地図の初期化に失敗しました:', error);
+      setMapError('地図の読み込みに失敗しました。ページを再読み込みしてください。');
+    });
 
     return () => {
       if (longPressTimerRef.current) {
@@ -514,15 +549,19 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
         if (!isLegacyModeRef.current) {
           // Advanced Marker モード
           try {
-            const { AdvancedMarkerElement } = await google.maps.importLibrary('marker') as google.maps.MarkerLibrary;
-            const content = createCurrentLocationMarkerContent();
-            currentLocationMarkerRef.current = new AdvancedMarkerElement({
-              map: mapInstanceRef.current!,
-              position: smoothLocation,
-              content,
-            });
+            const markerLib = await google.maps.importLibrary('marker') as google.maps.MarkerLibrary;
+            if (markerLib && markerLib.AdvancedMarkerElement) {
+              const content = createCurrentLocationMarkerContent();
+              currentLocationMarkerRef.current = new markerLib.AdvancedMarkerElement({
+                map: mapInstanceRef.current!,
+                position: smoothLocation,
+                content,
+              });
+            } else {
+              throw new Error('AdvancedMarkerElement not available');
+            }
           } catch (error) {
-            console.warn('Failed to create AdvancedMarker for current location, falling back:', error);
+            console.warn('現在地マーカー: AdvancedMarkerの作成に失敗、レガシーモードに切替:', error);
             // フォールバックとしてLegacy Markerを使用
             isLegacyModeRef.current = true;
             currentLocationMarkerRef.current = new google.maps.Marker({
@@ -533,6 +572,7 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
           }
         } else {
           // Legacy Marker モード
+          console.log('現在地マーカー: レガシーモードで作成');
           currentLocationMarkerRef.current = new google.maps.Marker({
             map: mapInstanceRef.current!,
             position: smoothLocation,
@@ -607,6 +647,20 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
     return (
       <div className="w-full h-full flex items-center justify-center bg-gray-200 text-text-secondary">
         地図を読み込み中...
+      </div>
+    );
+  }
+
+  if (mapError) {
+    return (
+      <div className="w-full h-full flex flex-col items-center justify-center bg-gray-200 text-text-secondary p-4 text-center">
+        <p className="text-lg mb-4">{mapError}</p>
+        <button
+          onClick={() => window.location.reload()}
+          className="px-4 py-2 bg-primary text-white rounded-lg"
+        >
+          再読み込み
+        </button>
       </div>
     );
   }
