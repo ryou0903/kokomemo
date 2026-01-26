@@ -222,14 +222,24 @@ export function SearchPage() {
       try {
         const origin = mapPositionRef.current || undefined;
 
-        // 1. オートコンプリート取得
-        const predictions = await getPlacePredictionsRef.current(value, origin);
+        // 1. オートコンプリート取得（必須）
+        let predictions: google.maps.places.AutocompletePrediction[] = [];
+        try {
+          predictions = await getPlacePredictionsRef.current(value, origin);
+        } catch (autocompleteError) {
+          console.warn('Autocomplete error:', autocompleteError);
+        }
         if (queryRef.current !== value) return;
 
-        // 2. 周辺検索（現在地がある場合のみ）
+        // 2. 周辺検索（オプション - 失敗しても続行）
         let nearbyResults: NearbyPlaceResult[] = [];
         if (origin && GOOGLE_MAPS_API_KEY) {
-          nearbyResults = await searchNearbyPlaces(value, origin, GOOGLE_MAPS_API_KEY);
+          try {
+            nearbyResults = await searchNearbyPlaces(value, origin, GOOGLE_MAPS_API_KEY);
+          } catch (nearbyError) {
+            // 周辺検索が失敗しても、オートコンプリート結果は表示する
+            console.warn('Nearby search error (continuing with autocomplete only):', nearbyError);
+          }
         }
         if (queryRef.current !== value) return;
 

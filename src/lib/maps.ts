@@ -211,16 +211,27 @@ function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: numbe
 }
 
 // Text Search API を使用した周辺検索
+// 注意: 新しいPlaces API (v1) を使用。古いブラウザでは動作しない場合がある
 export async function searchNearbyPlaces(
   query: string,
   location: { lat: number; lng: number },
   apiKey: string,
   radius: number = 5000
 ): Promise<NearbyPlaceResult[]> {
+  // fetch が利用可能かチェック
+  if (typeof fetch === 'undefined') {
+    console.warn('fetch not available, skipping nearby search');
+    return [];
+  }
+
   const url = 'https://places.googleapis.com/v1/places:searchText';
 
+  // タイムアウト付きのfetch（古いデバイス対応）
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timeoutId = controller ? setTimeout(() => controller.abort(), 5000) : null;
+
   try {
-    const response = await fetch(url, {
+    const fetchOptions: RequestInit = {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -238,7 +249,21 @@ export async function searchNearbyPlaces(
         languageCode: 'ja',
         maxResultCount: 5
       })
-    });
+    };
+
+    // AbortControllerが利用可能な場合のみsignalを追加
+    if (controller) {
+      fetchOptions.signal = controller.signal;
+    }
+
+    const response = await fetch(url, fetchOptions);
+
+    if (timeoutId) clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      console.warn('Nearby search API error:', response.status, response.statusText);
+      return [];
+    }
 
     const data = await response.json();
 
@@ -258,7 +283,13 @@ export async function searchNearbyPlaces(
       a.distanceMeters - b.distanceMeters
     );
   } catch (error) {
-    console.error('Nearby search error:', error);
+    if (timeoutId) clearTimeout(timeoutId);
+    // AbortErrorは警告のみ
+    if (error instanceof Error && error.name === 'AbortError') {
+      console.warn('Nearby search timed out');
+    } else {
+      console.warn('Nearby search error:', error);
+    }
     return [];
   }
 }

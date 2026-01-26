@@ -70,12 +70,17 @@ export function usePlacesAutocomplete(isGoogleLoaded: boolean) {
   const [placesService, setPlacesService] = useState<google.maps.places.PlacesService | null>(null);
 
   useEffect(() => {
-    if (isGoogleLoaded && window.google) {
-      setAutocompleteService(new google.maps.places.AutocompleteService());
-      // PlacesService needs a DOM element or map, we create a dummy div
-      const dummyDiv = document.createElement('div');
-      setPlacesService(new google.maps.places.PlacesService(dummyDiv));
-      setSessionToken(new google.maps.places.AutocompleteSessionToken());
+    if (isGoogleLoaded && window.google?.maps?.places) {
+      try {
+        setAutocompleteService(new google.maps.places.AutocompleteService());
+        // PlacesService needs a DOM element or map, we create a dummy div
+        const dummyDiv = document.createElement('div');
+        setPlacesService(new google.maps.places.PlacesService(dummyDiv));
+        setSessionToken(new google.maps.places.AutocompleteSessionToken());
+        console.log('Places services initialized successfully');
+      } catch (error) {
+        console.error('Failed to initialize Places services:', error);
+      }
     }
   }, [isGoogleLoaded]);
 
@@ -92,21 +97,36 @@ export function usePlacesAutocomplete(isGoogleLoaded: boolean) {
       }
 
       return new Promise((resolve) => {
-        autocompleteService.getPlacePredictions(
-          {
-            input,
-            sessionToken,
-            componentRestrictions: { country: 'jp' },
-            origin: origin ? new google.maps.LatLng(origin.lat, origin.lng) : undefined,
-          },
-          (predictions, status) => {
-            if (status === google.maps.places.PlacesServiceStatus.OK && predictions) {
-              resolve(predictions);
-            } else {
-              resolve([]);
+        try {
+          // origin の作成を try-catch で囲む（古いブラウザ対策）
+          let originLatLng: google.maps.LatLng | undefined;
+          if (origin && window.google?.maps?.LatLng) {
+            try {
+              originLatLng = new google.maps.LatLng(origin.lat, origin.lng);
+            } catch (e) {
+              console.warn('Failed to create LatLng for origin:', e);
             }
           }
-        );
+
+          autocompleteService.getPlacePredictions(
+            {
+              input,
+              sessionToken,
+              componentRestrictions: { country: 'jp' },
+              origin: originLatLng,
+            },
+            (predictions, status) => {
+              if (status === google.maps.places.PlacesServiceStatus.OK && predictions) {
+                resolve(predictions);
+              } else {
+                resolve([]);
+              }
+            }
+          );
+        } catch (error) {
+          console.warn('getPlacePredictions error:', error);
+          resolve([]);
+        }
       });
     },
     [autocompleteService, sessionToken]
@@ -119,21 +139,27 @@ export function usePlacesAutocomplete(isGoogleLoaded: boolean) {
       }
 
       return new Promise((resolve) => {
-        placesService.getDetails(
-          {
-            placeId,
-            fields: ['name', 'formatted_address', 'geometry', 'place_id'],
-            sessionToken,
-          },
-          (place, status) => {
-            if (status === google.maps.places.PlacesServiceStatus.OK && place) {
-              resolve(place);
-              refreshSessionToken();
-            } else {
-              resolve(null);
+        try {
+          placesService.getDetails(
+            {
+              placeId,
+              fields: ['name', 'formatted_address', 'geometry', 'place_id'],
+              sessionToken,
+            },
+            (place, status) => {
+              if (status === google.maps.places.PlacesServiceStatus.OK && place) {
+                resolve(place);
+                refreshSessionToken();
+              } else {
+                console.warn('getPlaceDetails failed with status:', status);
+                resolve(null);
+              }
             }
-          }
-        );
+          );
+        } catch (error) {
+          console.warn('getPlaceDetails error:', error);
+          resolve(null);
+        }
       });
     },
     [placesService, sessionToken, refreshSessionToken]
