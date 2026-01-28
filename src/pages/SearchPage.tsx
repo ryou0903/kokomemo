@@ -56,19 +56,43 @@ export function SearchPage() {
   const queryRef = useRef(query);
   const mapPositionRef = useRef(mapPosition);
 
-  // Get current location on mount
+  // Get current location on mount with timeout fallback
   useEffect(() => {
+    let isMounted = true;
+    let positionSet = false;
+
+    // 3秒でタイムアウト - デフォルト位置を使用
+    const timeoutId = setTimeout(() => {
+      if (isMounted && !positionSet) {
+        positionSet = true;
+        setMapPosition(DEFAULT_POSITION);
+        setIsLoadingInitialLocation(false);
+      }
+    }, 3000);
+
     getCurrentLocation()
       .then((loc) => {
-        setMapPosition({ lat: loc.latitude, lng: loc.longitude });
+        if (isMounted && !positionSet) {
+          positionSet = true;
+          setMapPosition({ lat: loc.latitude, lng: loc.longitude });
+          clearTimeout(timeoutId);
+          setIsLoadingInitialLocation(false);
+        }
       })
       .catch(() => {
         // Use default position if location access denied
-        setMapPosition(DEFAULT_POSITION);
-      })
-      .finally(() => {
-        setIsLoadingInitialLocation(false);
+        if (isMounted && !positionSet) {
+          positionSet = true;
+          setMapPosition(DEFAULT_POSITION);
+          clearTimeout(timeoutId);
+          setIsLoadingInitialLocation(false);
+        }
       });
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timeoutId);
+    };
   }, []);
 
   // Keep refs in sync
@@ -186,6 +210,63 @@ export function SearchPage() {
     }
   }, [query, showToast]);
 
+  // 検索実行関数（共通処理）- REST APIを使用（古いデバイスでも動作）
+  const executeSearch = useCallback(async (searchQuery: string) => {
+    if (!GOOGLE_MAPS_API_KEY) {
+      setIsSearching(false);
+      return;
+    }
+
+    try {
+      const origin = mapPositionRef.current || undefined;
+
+      // 1. オートコンプリート取得（REST API）
+      let autocompleteResults: AutocompleteResult[] = [];
+      try {
+        autocompleteResults = await searchAutocomplete(searchQuery, GOOGLE_MAPS_API_KEY, origin);
+      } catch (autocompleteError) {
+        console.warn('Autocomplete error:', autocompleteError);
+      }
+      if (queryRef.current !== searchQuery) return;
+
+      // 2. 周辺検索（オプション - 失敗しても続行）
+      let nearbyResults: NearbyPlaceResult[] = [];
+      if (origin) {
+        try {
+          nearbyResults = await searchNearbyPlaces(searchQuery, origin, GOOGLE_MAPS_API_KEY);
+        } catch (nearbyError) {
+          console.warn('Nearby search error (continuing with autocomplete only):', nearbyError);
+        }
+      }
+      if (queryRef.current !== searchQuery) return;
+
+      // 3. マージ（周辺検索を優先、重複排除）
+      const nearbyIds = new Set(nearbyResults.map(r => r.placeId));
+      const nearbySuggestions: Suggestion[] = nearbyResults.map(r => ({
+        text: r.name,
+        description: r.address,
+        placeId: r.placeId,
+        distanceMeters: r.distanceMeters,
+      }));
+      const autocompleteSuggestions: Suggestion[] = autocompleteResults
+        .filter(r => !nearbyIds.has(r.placeId))
+        .map((r) => ({
+          text: r.mainText,
+          description: r.secondaryText,
+          placeId: r.placeId,
+          distanceMeters: r.distanceMeters,
+        }));
+
+      // 4. 周辺検索結果を先頭に、その後にオートコンプリート結果
+      setSuggestions([...nearbySuggestions, ...autocompleteSuggestions]);
+    } catch (error) {
+      console.error('Place search error:', error);
+      setSuggestions([]);
+    } finally {
+      setIsSearching(false);
+    }
+  }, []);
+
   // Handle input change with debounce
   const handleInputChange = (value: string) => {
     setQuery(value);
@@ -202,63 +283,24 @@ export function SearchPage() {
     }
 
     setIsSearching(true);
-    debounceRef.current = window.setTimeout(async () => {
-      if (!GOOGLE_MAPS_API_KEY) {
-        setIsSearching(false);
-        return;
-      }
-
-      try {
-        const origin = mapPositionRef.current || undefined;
-
-        // REST APIを使用（古いデバイスでも動作）
-        // 1. オートコンプリート取得
-        let autocompleteResults: AutocompleteResult[] = [];
-        try {
-          autocompleteResults = await searchAutocomplete(value, GOOGLE_MAPS_API_KEY, origin);
-        } catch (autocompleteError) {
-          console.warn('Autocomplete error:', autocompleteError);
-        }
-        if (queryRef.current !== value) return;
-
-        // 2. 周辺検索（オプション - 失敗しても続行）
-        let nearbyResults: NearbyPlaceResult[] = [];
-        if (origin) {
-          try {
-            nearbyResults = await searchNearbyPlaces(value, origin, GOOGLE_MAPS_API_KEY);
-          } catch (nearbyError) {
-            console.warn('Nearby search error (continuing with autocomplete only):', nearbyError);
-          }
-        }
-        if (queryRef.current !== value) return;
-
-        // 3. マージ（周辺検索を優先、重複排除）
-        const nearbyIds = new Set(nearbyResults.map(r => r.placeId));
-        const nearbySuggestions: Suggestion[] = nearbyResults.map(r => ({
-          text: r.name,
-          description: r.address,
-          placeId: r.placeId,
-          distanceMeters: r.distanceMeters,
-        }));
-        const autocompleteSuggestions: Suggestion[] = autocompleteResults
-          .filter(r => !nearbyIds.has(r.placeId))
-          .map((r) => ({
-            text: r.mainText,
-            description: r.secondaryText,
-            placeId: r.placeId,
-            distanceMeters: r.distanceMeters,
-          }));
-
-        // 4. 周辺検索結果を先頭に、その後にオートコンプリート結果
-        setSuggestions([...nearbySuggestions, ...autocompleteSuggestions]);
-      } catch (error) {
-        console.error('Place search error:', error);
-        setSuggestions([]);
-      } finally {
-        setIsSearching(false);
-      }
+    debounceRef.current = window.setTimeout(() => {
+      executeSearch(value);
     }, 800);
   };
+
+  // クイック検索（即時実行、デバウンスなし）
+  const handleQuickSearch = useCallback((searchTerm: string) => {
+    setQuery(searchTerm);
+    setSelectedPlace(null);
+    setSuggestions([]);
+    setIsSearching(true);
+
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+    }
+
+    executeSearch(searchTerm);
+  }, [executeSearch]);
 
   // Handle suggestion selection
   const handleSelectSuggestion = async (suggestion: Suggestion) => {
@@ -329,37 +371,38 @@ export function SearchPage() {
 
   // Glass style classes
   const glassStyle = 'bg-white/80 backdrop-blur-xl shadow-lg border border-gray-200';
-  const glassButtonStyle = `${glassStyle} rounded-full px-2 py-0.5 text-sm font-medium text-text active:bg-white/90 transition-colors`;
-  const glassInputStyle = `${glassStyle} rounded-full px-3 py-1 text-base outline-none focus:ring-2 focus:ring-primary/30`;
+  const glassButtonStyle = `${glassStyle} rounded-full px-4 h-12 text-base font-medium text-text active:bg-white/90 transition-colors flex items-center justify-center`;
+  const glassInputStyle = `${glassStyle} rounded-full px-4 h-12 text-base outline-none focus:ring-2 focus:ring-primary/30`;
 
   return (
     <div className="fixed inset-0 bg-gray-200">
-      {/* Full-screen Map */}
-      {hasGoogleApi && mapPosition && !isLoadingInitialLocation && (
+      {/* Full-screen Map - isLoadedも確認 */}
+      {hasGoogleApi && mapPosition && isLoaded && (
         <InteractiveMap
           latitude={selectedPlace?.latitude ?? mapPosition.lat}
           longitude={selectedPlace?.longitude ?? mapPosition.lng}
           isLoaded={isLoaded}
           onLocationChange={(lat, lng, address, name) => {
-            if (selectedPlace) {
-              setSelectedPlace({
-                ...selectedPlace,
-                latitude: lat,
-                longitude: lng,
-                address: address,
-                name: name || address.split(',')[0] || selectedPlace.name,
-              });
-            }
+            // ピンを刺した時は常にモーダルを表示
+            setSelectedPlace({
+              placeId: `pin-${Date.now()}`,
+              name: name || address.split(',')[0] || '選択した場所',
+              address: address,
+              latitude: lat,
+              longitude: lng,
+            });
           }}
         />
       )}
 
-      {/* Loading indicator for initial location */}
-      {isLoadingInitialLocation && (
+      {/* Loading indicator - 位置取得中またはマップロード中 */}
+      {(isLoadingInitialLocation || (hasGoogleApi && !isLoaded)) && (
         <div className="absolute inset-0 flex items-center justify-center bg-gray-200">
           <div className={`${glassStyle} rounded-2xl p-6 flex flex-col items-center gap-3`}>
             <div className="h-8 w-8 animate-spin rounded-full border-3 border-primary border-t-transparent" />
-            <p className="text-text-secondary text-sm">現在地を取得中...</p>
+            <p className="text-text-secondary text-sm">
+              {isLoadingInitialLocation ? '現在地を取得中...' : '地図を読み込み中...'}
+            </p>
           </div>
         </div>
       )}
@@ -410,15 +453,15 @@ export function SearchPage() {
               <span>{isFixingTypos ? '修正中...' : '誤字修正'}</span>
             </button>
             <button
-              onClick={() => handleInputChange('トイレ')}
-              className={`${glassButtonStyle} flex items-center justify-center gap-1`}
+              onClick={() => handleQuickSearch('トイレ')}
+              className={`${glassButtonStyle} gap-1`}
             >
               <span>🚻</span>
               <span>トイレを探す</span>
             </button>
             <button
-              onClick={() => handleInputChange('コンビニ')}
-              className={`${glassButtonStyle} flex items-center justify-center gap-1`}
+              onClick={() => handleQuickSearch('コンビニ')}
+              className={`${glassButtonStyle} gap-1`}
             >
               <span>🏪</span>
               <span>コンビニを探す</span>

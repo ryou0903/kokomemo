@@ -35,6 +35,9 @@ export const DEFAULT_TABS: Tab[] = [
   { id: 'planned', name: '今度行く', isCustom: false, order: 2 },
   { id: 'revisit', name: 'また来る', isCustom: false, order: 3 },
   { id: 'rest', name: '休憩場所', isCustom: false, order: 4 },
+  { id: 'convenience', name: 'コンビニ', isCustom: false, order: 5 },
+  { id: 'toilet', name: 'トイレ', isCustom: false, order: 6 },
+  { id: 'other', name: 'その他', isCustom: false, order: 7 },
 ];
 
 export const DEFAULT_SETTINGS: AppSettings = {

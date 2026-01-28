@@ -15,6 +15,27 @@ import { useToast } from '../contexts/ToastContext';
 
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
 
+// 住所から国名を削除し、郵便番号を分離
+const parseAddress = (fullAddress: string): { address: string; postalCode: string } => {
+  let address = fullAddress;
+  let postalCode = '';
+
+  // 郵便番号を抽出（日本形式: 〒XXX-XXXX または XXX-XXXX）
+  const postalMatch = address.match(/〒?\s*(\d{3}-?\d{4})/);
+  if (postalMatch) {
+    postalCode = postalMatch[1].includes('-') ? postalMatch[1] : postalMatch[1].slice(0, 3) + '-' + postalMatch[1].slice(3);
+    address = address.replace(postalMatch[0], '').trim();
+  }
+
+  // 国名を削除（日本、Japan、JPなど）
+  address = address.replace(/^(日本、?|Japan,?\s*)/i, '').trim();
+
+  // 先頭のカンマやスペースを削除
+  address = address.replace(/^[,、\s]+/, '').trim();
+
+  return { address, postalCode };
+};
+
 export function PlacePage() {
   const { id } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
@@ -38,6 +59,7 @@ export function PlacePage() {
   const [name, setName] = useState('');
   const [memo, setMemo] = useState('');
   const [address, setAddress] = useState('');
+  const [postalCode, setPostalCode] = useState('');
   const [latitude, setLatitude] = useState(0);
   const [longitude, setLongitude] = useState(0);
   const [tabId, setTabId] = useState('frequent');
@@ -74,9 +96,19 @@ export function PlacePage() {
               location.longitude,
               GOOGLE_MAPS_API_KEY
             );
+
+            // 住所を設定
             setAddress(geocodeResult.address);
+
+            // 郵便番号を設定（reverseGeocodeから直接取得）
+            if (geocodeResult.postalCode) {
+              setPostalCode(geocodeResult.postalCode);
+            }
+
+            // placeNameも国名・郵便番号を除去
             if (geocodeResult.placeName) {
-              setName(geocodeResult.placeName);
+              const parsedName = parseAddress(geocodeResult.placeName);
+              setName(parsedName.address || geocodeResult.address);
             }
           } else {
             setAddress(`${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`);
@@ -90,7 +122,11 @@ export function PlacePage() {
       } else if (isNew && prefillName && prefillLat && prefillLng) {
         // Pre-filled from search
         setName(prefillName);
-        setAddress(prefillAddress || '');
+        if (prefillAddress) {
+          const parsed = parseAddress(prefillAddress);
+          setAddress(parsed.address);
+          setPostalCode(parsed.postalCode);
+        }
         setLatitude(parseFloat(prefillLat));
         setLongitude(parseFloat(prefillLng));
       }
@@ -165,7 +201,6 @@ export function PlacePage() {
       <Header
         title={isNew ? '新しい場所を登録' : '場所を編集'}
         showBack
-        showHome
       />
 
       <main className="flex-1 px-4 py-6">
@@ -182,6 +217,22 @@ export function PlacePage() {
             onChange={(e) => setName(e.target.value)}
             placeholder="例: 〇〇駅前のコンビニ"
             error={errors.name}
+          />
+
+          {/* 住所 */}
+          <Input
+            label="住所"
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
+            placeholder="例: 千葉県大網白里市永田186-5"
+          />
+
+          {/* 郵便番号 */}
+          <Input
+            label="郵便番号"
+            value={postalCode}
+            onChange={(e) => setPostalCode(e.target.value)}
+            placeholder="例: 299-3233"
           />
 
           <Textarea
@@ -201,10 +252,9 @@ export function PlacePage() {
                   onClick={() => setTabId(tab.id)}
                   className={`
                     px-3 py-2 rounded-lg text-sm font-medium transition-all
-                    ${
-                      tabId === tab.id
-                        ? 'bg-primary text-white'
-                        : 'bg-white text-text border border-border hover:bg-gray-50'
+                    ${tabId === tab.id
+                      ? 'bg-primary text-white'
+                      : 'bg-white text-text border border-border hover:bg-gray-50'
                     }
                   `}
                 >
@@ -213,15 +263,6 @@ export function PlacePage() {
               ))}
             </div>
           </div>
-
-          {address && (
-            <div className="flex flex-col gap-2">
-              <p className="text-base font-bold text-text">住所</p>
-              <p className="text-sm text-text-secondary bg-gray-50 rounded-lg px-3 py-2">
-                {address}
-              </p>
-            </div>
-          )}
 
           {/* Action Buttons */}
           <div className="mt-4 flex gap-3">

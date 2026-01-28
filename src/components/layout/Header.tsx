@@ -3,7 +3,6 @@ import { useNavigate, useLocation } from 'react-router-dom';
 interface HeaderProps {
   title: string;
   showBack?: boolean;
-  showHome?: boolean;
   rightAction?: {
     label: string;
     icon?: string;
@@ -11,10 +10,13 @@ interface HeaderProps {
   };
 }
 
-export function Header({ title, showBack, showHome, rightAction }: HeaderProps) {
+export function Header({ title, showBack, rightAction }: HeaderProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const isHome = location.pathname === '/';
+
+  // Glass style（SearchPageと統一）
+  const glassButtonStyle = 'bg-white/80 backdrop-blur-xl shadow-lg border border-gray-200 rounded-full px-4 h-12 text-base font-medium text-text active:bg-white/90 transition-colors flex items-center justify-center';
 
   return (
     <header className="sticky top-0 z-30 bg-surface border-b border-border">
@@ -24,11 +26,10 @@ export function Header({ title, showBack, showHome, rightAction }: HeaderProps) 
           {showBack && !isHome && (
             <button
               onClick={() => navigate(-1)}
-              className="flex items-center gap-1 px-3 py-2 rounded-lg border border-border bg-white text-primary font-medium hover:bg-gray-50 active:bg-gray-100 transition-colors"
+              className={glassButtonStyle}
               aria-label="戻る"
             >
-              <span className="text-lg">←</span>
-              <span>戻る</span>
+              戻る
             </button>
           )}
         </div>
@@ -37,23 +38,14 @@ export function Header({ title, showBack, showHome, rightAction }: HeaderProps) 
           {title}
         </h1>
 
-        {/* Right side - Home button and rightAction */}
+        {/* Right side - rightAction only (Home button removed) */}
         <div className="flex items-center gap-2">
-          {showHome && !isHome && (
-            <button
-              onClick={() => navigate('/')}
-              className="flex items-center gap-1 px-3 py-2 rounded-lg border border-border bg-white text-text hover:bg-gray-50 active:bg-gray-100 transition-colors"
-              aria-label="最初の画面に戻る"
-            >
-              <span className="text-lg">🏠</span>
-            </button>
-          )}
           {rightAction && (
             <button
               onClick={rightAction.onClick}
-              className="flex items-center gap-1 px-3 py-2 rounded-lg border border-border bg-white text-text font-medium hover:bg-gray-50 active:bg-gray-100 transition-colors"
+              className={glassButtonStyle}
             >
-              {rightAction.icon && <span className="text-lg">{rightAction.icon}</span>}
+              {rightAction.icon && <span className="text-lg mr-1">{rightAction.icon}</span>}
               <span>{rightAction.label}</span>
             </button>
           )}
@@ -62,3 +54,4 @@ export function Header({ title, showBack, showHome, rightAction }: HeaderProps) 
     </header>
   );
 }
+

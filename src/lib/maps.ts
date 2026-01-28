@@ -58,6 +58,7 @@ export function getCurrentLocation(): Promise<LocationResult> {
 export interface ReverseGeocodeResult {
   address: string;
   placeName?: string;
+  postalCode?: string;
 }
 
 export async function reverseGeocode(
@@ -75,7 +76,22 @@ export async function reverseGeocode(
   }
 
   const result = data.results[0];
-  const address = result.formatted_address || '';
+  const fullAddress = result.formatted_address || '';
+
+  // 郵便番号を抽出
+  let postalCode: string | undefined;
+  const postalMatch = fullAddress.match(/〒?\s*(\d{3}-?\d{4})/);
+  if (postalMatch) {
+    postalCode = postalMatch[1].includes('-')
+      ? postalMatch[1]
+      : postalMatch[1].slice(0, 3) + '-' + postalMatch[1].slice(3);
+  }
+
+  // 住所から国名と郵便番号を除去
+  let address = fullAddress
+    .replace(/^日本、?\s*/, '')
+    .replace(/〒?\s*\d{3}-?\d{4}\s*/, '')
+    .trim();
 
   // Try to find a more specific place name
   let placeName: string | undefined;
@@ -92,8 +108,9 @@ export async function reverseGeocode(
   }
 
   return {
-    address: address.replace(/^日本、?〒?\d{3}-?\d{4}\s*/, ''),
+    address,
     placeName,
+    postalCode,
   };
 }
 
@@ -369,8 +386,8 @@ function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: numbe
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLng = (lng2 - lng1) * Math.PI / 180;
   const a = Math.sin(dLat / 2) ** 2 +
-            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-            Math.sin(dLng / 2) ** 2;
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLng / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 

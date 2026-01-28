@@ -31,7 +31,7 @@ export function SettingsPage() {
 
   return (
     <div className="flex flex-col min-h-screen">
-      <Header title="設定" showBack showHome />
+      <Header title="設定" showBack />
 
       <main className="flex-1 px-4 py-6">
         <div className="flex flex-col gap-6">
@@ -45,10 +45,9 @@ export function SettingsPage() {
                   onClick={() => handleTravelModeChange(mode.value)}
                   className={`
                     w-full p-4 rounded-xl text-left transition-all
-                    ${
-                      settings.travelMode === mode.value
-                        ? 'bg-primary/10 border-2 border-primary'
-                        : 'bg-white border-2 border-border hover:bg-gray-50'
+                    ${settings.travelMode === mode.value
+                      ? 'bg-primary/10 border-2 border-primary'
+                      : 'bg-white border-2 border-border hover:bg-gray-50'
                     }
                   `}
                 >

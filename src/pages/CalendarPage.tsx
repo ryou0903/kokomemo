@@ -88,7 +88,7 @@ export function CalendarPage() {
 
   return (
     <div className="flex flex-col min-h-screen">
-      <Header title="📅 カレンダー" showBack showHome />
+      <Header title="📅 カレンダー" showBack />
 
       <main className="flex-1 flex flex-col">
         {/* Month navigation */}
