@@ -8,12 +8,13 @@ interface InteractiveMapProps {
   longitude: number;
   onLocationChange?: (lat: number, lng: number, address: string, name?: string) => void;
   isLoaded: boolean;
+  hideCurrentLocationButton?: boolean;
 }
 
 // マーカー型の統一（Advanced または Legacy）
 type MarkerType = google.maps.marker.AdvancedMarkerElement | google.maps.Marker;
 
-export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded }: InteractiveMapProps) {
+export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded, hideCurrentLocationButton }: InteractiveMapProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<google.maps.Map | null>(null);
   const markerRef = useRef<MarkerType | null>(null);
@@ -682,10 +683,10 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
         </div>
       )}
       {/* 現在地ボタン */}
-      {currentLocation && (
+      {currentLocation && !hideCurrentLocationButton && (
         <button
           onClick={handleCenterOnCurrentLocation}
-          className="absolute bottom-24 right-2.5 w-10 h-10 bg-[#3d4043] rounded-lg shadow-lg flex items-center justify-center active:bg-[#4d5053] z-10"
+          className="absolute bottom-36 right-2.5 w-10 h-10 bg-[#3d4043] rounded-lg shadow-lg flex items-center justify-center active:bg-[#4d5053] z-10"
           aria-label="現在地に移動"
         >
           <div className="w-5 h-5 rounded-full border-2 border-white flex items-center justify-center">
