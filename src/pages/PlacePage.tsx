@@ -251,7 +251,7 @@ export function PlacePage() {
                   type="button"
                   onClick={() => setTabId(tab.id)}
                   className={`
-                    px-3 py-2 rounded-lg text-sm font-medium transition-all
+                    min-w-[5rem] px-3 py-2 rounded-lg text-sm font-medium transition-all text-center
                     ${tabId === tab.id
                       ? 'bg-primary text-white'
                       : 'bg-white text-text border border-border hover:bg-gray-50'

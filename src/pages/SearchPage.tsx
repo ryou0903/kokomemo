@@ -17,9 +17,31 @@ interface PlaceResult {
   placeId: string;
   name: string;
   address: string;
+  postalCode?: string;
   latitude: number;
   longitude: number;
 }
+
+// 住所から国名と郵便番号を分離
+const parseAddress = (fullAddress: string): { address: string; postalCode?: string } => {
+  // 郵便番号を抽出（日本形式: 〒XXX-XXXX または XXX-XXXX）
+  const postalMatch = fullAddress.match(/〒?\s*(\d{3}-?\d{4})/);
+  let postalCode: string | undefined;
+  if (postalMatch) {
+    postalCode = postalMatch[1].includes('-')
+      ? postalMatch[1]
+      : postalMatch[1].slice(0, 3) + '-' + postalMatch[1].slice(3);
+  }
+
+  // 住所から「日本、」と郵便番号を除去
+  const address = fullAddress
+    .replace(/^日本、?\s*/, '')
+    .replace(/〒?\s*\d{3}-?\d{4}\s*/, '')
+    .replace(/^[,、\s]+/, '')
+    .trim();
+
+  return { address, postalCode };
+};
 
 interface Suggestion {
   text: string;
@@ -310,10 +332,12 @@ export function SearchPage() {
       // REST APIを使用（古いデバイスでも動作）
       const placeDetails = await getPlaceDetailsRest(suggestion.placeId, GOOGLE_MAPS_API_KEY);
       if (placeDetails) {
+        const parsed = parseAddress(placeDetails.address || '');
         const place: PlaceResult = {
           placeId: placeDetails.placeId,
           name: placeDetails.name || suggestion.text,
-          address: placeDetails.address || '',
+          address: parsed.address,
+          postalCode: parsed.postalCode,
           latitude: placeDetails.latitude,
           longitude: placeDetails.longitude,
         };
@@ -382,12 +406,15 @@ export function SearchPage() {
           latitude={selectedPlace?.latitude ?? mapPosition.lat}
           longitude={selectedPlace?.longitude ?? mapPosition.lng}
           isLoaded={isLoaded}
+          hideCurrentLocationButton={!!selectedPlace}
           onLocationChange={(lat, lng, address, name) => {
             // ピンを刺した時は常にモーダルを表示
+            const parsed = parseAddress(address);
             setSelectedPlace({
               placeId: `pin-${Date.now()}`,
-              name: name || address.split(',')[0] || '選択した場所',
-              address: address,
+              name: name || parsed.address.split(',')[0] || '選択した場所',
+              address: parsed.address,
+              postalCode: parsed.postalCode,
               latitude: lat,
               longitude: lng,
             });
@@ -497,8 +524,14 @@ export function SearchPage() {
       {selectedPlace && (
         <div className={`absolute bottom-0 left-0 right-0 ${glassStyle} rounded-t-3xl p-4 pb-safe pointer-events-auto`}>
           <div className="mb-3">
-            <h2 className="text-lg font-bold text-text">{selectedPlace.name}</h2>
+            {/* 名前がある場合のみ表示（名前と住所が同じ場合は住所のみ） */}
+            {selectedPlace.name && selectedPlace.name !== selectedPlace.address && (
+              <h2 className="text-lg font-bold text-text">{selectedPlace.name}</h2>
+            )}
             <p className="text-sm text-text-secondary">{selectedPlace.address}</p>
+            {selectedPlace.postalCode && (
+              <p className="text-xs text-text-secondary mt-0.5">〒{selectedPlace.postalCode}</p>
+            )}
           </div>
 
           <div className="flex gap-2">
