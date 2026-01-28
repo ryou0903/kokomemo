@@ -293,12 +293,20 @@ export async function getPlaceDetailsRest(
   apiKey: string
 ): Promise<PlaceSearchResult | null> {
   if (!placeId || typeof fetch === 'undefined') {
+    console.warn('getPlaceDetailsRest: invalid placeId or fetch unavailable');
     return null;
   }
 
-  // placeIdがplaces/で始まる場合はそのまま、そうでなければ追加
-  const fullPlaceId = placeId.startsWith('places/') ? placeId : `places/${placeId}`;
-  const url = `https://places.googleapis.com/v1/${fullPlaceId}`;
+  // placeIdのフォーマットを正規化
+  // "places/ChIJ..." → "ChIJ..."
+  // "ChIJ..." → "ChIJ..." (そのまま)
+  const normalizedPlaceId = placeId.startsWith('places/')
+    ? placeId.substring(7)
+    : placeId;
+
+  const url = `https://places.googleapis.com/v1/places/${normalizedPlaceId}`;
+
+  console.log('Fetching place details:', { originalPlaceId: placeId, normalizedPlaceId, url });
 
   const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
   const timeoutId = controller ? setTimeout(() => controller.abort(), 5000) : null;
@@ -321,18 +329,32 @@ export async function getPlaceDetailsRest(
     if (timeoutId) clearTimeout(timeoutId);
 
     if (!response.ok) {
-      console.warn('Place details API error:', response.status, response.statusText);
+      const errorText = await response.text().catch(() => '');
+      console.warn('Place details API error:', {
+        status: response.status,
+        statusText: response.statusText,
+        url,
+        placeId,
+        errorText
+      });
       return null;
     }
 
     const data = await response.json();
+    console.log('Place details response:', data);
+
+    // locationフィールドの存在確認
+    if (!data.location || typeof data.location.latitude !== 'number' || typeof data.location.longitude !== 'number') {
+      console.warn('Place details missing valid location:', data);
+      return null;
+    }
 
     return {
-      placeId: data.id || placeId,
+      placeId: normalizedPlaceId,
       name: data.displayName?.text || '',
       address: data.formattedAddress || '',
-      latitude: data.location?.latitude || 0,
-      longitude: data.location?.longitude || 0,
+      latitude: data.location.latitude,
+      longitude: data.location.longitude,
     };
   } catch (error) {
     if (timeoutId) clearTimeout(timeoutId);
@@ -412,7 +434,8 @@ export async function searchNearbyPlaces(
     if (!data.places) return [];
 
     return data.places.map((place: any) => ({
-      placeId: place.id,
+      // placeIdの正規化: "places/ChIJ..." → "ChIJ..."
+      placeId: (place.id || '').replace(/^places\//, ''),
       name: place.displayName?.text || '',
       address: place.formattedAddress || '',
       latitude: place.location?.latitude || 0,
