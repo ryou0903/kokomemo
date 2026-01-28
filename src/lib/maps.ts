@@ -216,6 +216,170 @@ export interface NearbyPlaceResult {
   distanceMeters: number;
 }
 
+// オートコンプリート結果の型
+export interface AutocompleteResult {
+  placeId: string;
+  mainText: string;
+  secondaryText: string;
+  distanceMeters?: number;
+}
+
+// REST APIベースのオートコンプリート（JavaScript APIが動作しない古いデバイス用）
+export async function searchAutocomplete(
+  input: string,
+  apiKey: string,
+  location?: { lat: number; lng: number }
+): Promise<AutocompleteResult[]> {
+  if (!input.trim() || typeof fetch === 'undefined') {
+    return [];
+  }
+
+  const url = 'https://places.googleapis.com/v1/places:autocomplete';
+
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timeoutId = controller ? setTimeout(() => controller.abort(), 5000) : null;
+
+  try {
+    const requestBody: any = {
+      input,
+      languageCode: 'ja',
+      regionCode: 'JP',
+    };
+
+    // 現在地がある場合はlocationBiasを追加
+    if (location) {
+      requestBody.locationBias = {
+        circle: {
+          center: { latitude: location.lat, longitude: location.lng },
+          radius: 50000 // 50km
+        }
+      };
+    }
+
+    const fetchOptions: RequestInit = {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': apiKey,
+      },
+      body: JSON.stringify(requestBody)
+    };
+
+    if (controller) {
+      fetchOptions.signal = controller.signal;
+    }
+
+    const response = await fetch(url, fetchOptions);
+
+    if (timeoutId) clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      console.warn('Autocomplete API error:', response.status, response.statusText);
+      return [];
+    }
+
+    const data = await response.json();
+
+    if (!data.suggestions) return [];
+
+    return data.suggestions
+      .filter((s: any) => s.placePrediction)
+      .map((s: any) => {
+        const prediction = s.placePrediction;
+        return {
+          placeId: prediction.placeId,
+          mainText: prediction.structuredFormat?.mainText?.text || prediction.text?.text || '',
+          secondaryText: prediction.structuredFormat?.secondaryText?.text || '',
+          distanceMeters: prediction.distanceMeters,
+        };
+      });
+  } catch (error) {
+    if (timeoutId) clearTimeout(timeoutId);
+    if (error instanceof Error && error.name === 'AbortError') {
+      console.warn('Autocomplete timed out');
+    } else {
+      console.warn('Autocomplete error:', error);
+    }
+    return [];
+  }
+}
+
+// REST APIベースの場所詳細取得
+export async function getPlaceDetailsRest(
+  placeId: string,
+  apiKey: string
+): Promise<PlaceSearchResult | null> {
+  if (!placeId || typeof fetch === 'undefined') {
+    console.warn('getPlaceDetailsRest: invalid placeId or fetch unavailable');
+    return null;
+  }
+
+  // placeIdのフォーマットを正規化
+  // "places/ChIJ..." → "ChIJ..."
+  // "ChIJ..." → "ChIJ..." (そのまま)
+  const normalizedPlaceId = placeId.startsWith('places/')
+    ? placeId.substring(7)
+    : placeId;
+
+  const url = `https://places.googleapis.com/v1/places/${normalizedPlaceId}`;
+
+  console.log('Fetching place details:', { originalPlaceId: placeId, normalizedPlaceId, url });
+
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timeoutId = controller ? setTimeout(() => controller.abort(), 5000) : null;
+
+  try {
+    const fetchOptions: RequestInit = {
+      method: 'GET',
+      headers: {
+        'X-Goog-Api-Key': apiKey,
+        'X-Goog-FieldMask': 'id,displayName,formattedAddress,location',
+      },
+    };
+
+    if (controller) {
+      fetchOptions.signal = controller.signal;
+    }
+
+    const response = await fetch(url, fetchOptions);
+
+    if (timeoutId) clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '');
+      console.warn('Place details API error:', {
+        status: response.status,
+        statusText: response.statusText,
+        url,
+        placeId,
+        errorText
+      });
+      return null;
+    }
+
+    const data = await response.json();
+    console.log('Place details response:', data);
+
+    // locationフィールドの存在確認
+    if (!data.location || typeof data.location.latitude !== 'number' || typeof data.location.longitude !== 'number') {
+      console.warn('Place details missing valid location:', data);
+      return null;
+    }
+
+    return {
+      placeId: normalizedPlaceId,
+      name: data.displayName?.text || '',
+      address: data.formattedAddress || '',
+      latitude: data.location.latitude,
+      longitude: data.location.longitude,
+    };
+  } catch (error) {
+    if (timeoutId) clearTimeout(timeoutId);
+    console.warn('Place details error:', error);
+    return null;
+  }
+}
+
 // 距離計算関数（Haversine formula）
 function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371000; // 地球の半径（メートル）
@@ -228,16 +392,27 @@ function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: numbe
 }
 
 // Text Search API を使用した周辺検索
+// 注意: 新しいPlaces API (v1) を使用。古いブラウザでは動作しない場合がある
 export async function searchNearbyPlaces(
   query: string,
   location: { lat: number; lng: number },
   apiKey: string,
   radius: number = 5000
 ): Promise<NearbyPlaceResult[]> {
+  // fetch が利用可能かチェック
+  if (typeof fetch === 'undefined') {
+    console.warn('fetch not available, skipping nearby search');
+    return [];
+  }
+
   const url = 'https://places.googleapis.com/v1/places:searchText';
 
+  // タイムアウト付きのfetch（古いデバイス対応）
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timeoutId = controller ? setTimeout(() => controller.abort(), 5000) : null;
+
   try {
-    const response = await fetch(url, {
+    const fetchOptions: RequestInit = {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -255,14 +430,29 @@ export async function searchNearbyPlaces(
         languageCode: 'ja',
         maxResultCount: 5
       })
-    });
+    };
+
+    // AbortControllerが利用可能な場合のみsignalを追加
+    if (controller) {
+      fetchOptions.signal = controller.signal;
+    }
+
+    const response = await fetch(url, fetchOptions);
+
+    if (timeoutId) clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      console.warn('Nearby search API error:', response.status, response.statusText);
+      return [];
+    }
 
     const data = await response.json();
 
     if (!data.places) return [];
 
     return data.places.map((place: any) => ({
-      placeId: place.id,
+      // placeIdの正規化: "places/ChIJ..." → "ChIJ..."
+      placeId: (place.id || '').replace(/^places\//, ''),
       name: place.displayName?.text || '',
       address: place.formattedAddress || '',
       latitude: place.location?.latitude || 0,
@@ -275,7 +465,13 @@ export async function searchNearbyPlaces(
       a.distanceMeters - b.distanceMeters
     );
   } catch (error) {
-    console.error('Nearby search error:', error);
+    if (timeoutId) clearTimeout(timeoutId);
+    // AbortErrorは警告のみ
+    if (error instanceof Error && error.name === 'AbortError') {
+      console.warn('Nearby search timed out');
+    } else {
+      console.warn('Nearby search error:', error);
+    }
     return [];
   }
 }

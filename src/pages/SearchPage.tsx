@@ -1,9 +1,9 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { InteractiveMap } from '../components/InteractiveMap';
-import { useGoogleMaps, usePlacesAutocomplete } from '../hooks/useGoogleMaps';
-import { openNavigation, getCurrentLocation, searchNearbyPlaces } from '../lib/maps';
-import type { NearbyPlaceResult } from '../lib/maps';
+import { useGoogleMaps } from '../hooks/useGoogleMaps';
+import { openNavigation, getCurrentLocation, searchNearbyPlaces, searchAutocomplete, getPlaceDetailsRest } from '../lib/maps';
+import type { NearbyPlaceResult, AutocompleteResult } from '../lib/maps';
 import { savePlace, getSettings, addSearchHistory } from '../lib/storage';
 import { useToast } from '../contexts/ToastContext';
 
@@ -51,12 +51,9 @@ export function SearchPage() {
   const [isLoadingInitialLocation, setIsLoadingInitialLocation] = useState(true);
 
   const { isLoaded, loadError } = useGoogleMaps({ apiKey: GOOGLE_MAPS_API_KEY });
-  const { getPlacePredictions, getPlaceDetails, isReady } = usePlacesAutocomplete(isLoaded);
 
   const debounceRef = useRef<number | null>(null);
   const queryRef = useRef(query);
-  const isReadyRef = useRef(isReady);
-  const getPlacePredictionsRef = useRef(getPlacePredictions);
   const mapPositionRef = useRef(mapPosition);
 
   // Get current location on mount with timeout fallback
@@ -102,14 +99,6 @@ export function SearchPage() {
   useEffect(() => {
     queryRef.current = query;
   }, [query]);
-
-  useEffect(() => {
-    isReadyRef.current = isReady;
-  }, [isReady]);
-
-  useEffect(() => {
-    getPlacePredictionsRef.current = getPlacePredictions;
-  }, [getPlacePredictions]);
 
   useEffect(() => {
     mapPositionRef.current = mapPosition;
@@ -221,9 +210,9 @@ export function SearchPage() {
     }
   }, [query, showToast]);
 
-  // 検索実行関数（共通処理）
+  // 検索実行関数（共通処理）- REST APIを使用（古いデバイスでも動作）
   const executeSearch = useCallback(async (searchQuery: string) => {
-    if (!isReadyRef.current) {
+    if (!GOOGLE_MAPS_API_KEY) {
       setIsSearching(false);
       return;
     }
@@ -231,14 +220,23 @@ export function SearchPage() {
     try {
       const origin = mapPositionRef.current || undefined;
 
-      // 1. オートコンプリート取得
-      const predictions = await getPlacePredictionsRef.current(searchQuery, origin);
+      // 1. オートコンプリート取得（REST API）
+      let autocompleteResults: AutocompleteResult[] = [];
+      try {
+        autocompleteResults = await searchAutocomplete(searchQuery, GOOGLE_MAPS_API_KEY, origin);
+      } catch (autocompleteError) {
+        console.warn('Autocomplete error:', autocompleteError);
+      }
       if (queryRef.current !== searchQuery) return;
 
-      // 2. 周辺検索（現在地がある場合のみ）
+      // 2. 周辺検索（オプション - 失敗しても続行）
       let nearbyResults: NearbyPlaceResult[] = [];
-      if (origin && GOOGLE_MAPS_API_KEY) {
-        nearbyResults = await searchNearbyPlaces(searchQuery, origin, GOOGLE_MAPS_API_KEY);
+      if (origin) {
+        try {
+          nearbyResults = await searchNearbyPlaces(searchQuery, origin, GOOGLE_MAPS_API_KEY);
+        } catch (nearbyError) {
+          console.warn('Nearby search error (continuing with autocomplete only):', nearbyError);
+        }
       }
       if (queryRef.current !== searchQuery) return;
 
@@ -250,17 +248,17 @@ export function SearchPage() {
         placeId: r.placeId,
         distanceMeters: r.distanceMeters,
       }));
-      const placeSuggestions: Suggestion[] = predictions
-        .filter(p => !nearbyIds.has(p.place_id))
-        .map((p) => ({
-          text: p.structured_formatting.main_text,
-          description: p.structured_formatting.secondary_text,
-          placeId: p.place_id,
-          distanceMeters: p.distance_meters,
+      const autocompleteSuggestions: Suggestion[] = autocompleteResults
+        .filter(r => !nearbyIds.has(r.placeId))
+        .map((r) => ({
+          text: r.mainText,
+          description: r.secondaryText,
+          placeId: r.placeId,
+          distanceMeters: r.distanceMeters,
         }));
 
       // 4. 周辺検索結果を先頭に、その後にオートコンプリート結果
-      setSuggestions([...nearbySuggestions, ...placeSuggestions]);
+      setSuggestions([...nearbySuggestions, ...autocompleteSuggestions]);
     } catch (error) {
       console.error('Place search error:', error);
       setSuggestions([]);
@@ -309,19 +307,22 @@ export function SearchPage() {
     setIsSearching(true);
     setSuggestions([]);
     try {
-      const placeDetails = await getPlaceDetails(suggestion.placeId);
-      if (placeDetails && placeDetails.geometry?.location) {
+      // REST APIを使用（古いデバイスでも動作）
+      const placeDetails = await getPlaceDetailsRest(suggestion.placeId, GOOGLE_MAPS_API_KEY);
+      if (placeDetails) {
         const place: PlaceResult = {
-          placeId: suggestion.placeId,
+          placeId: placeDetails.placeId,
           name: placeDetails.name || suggestion.text,
-          address: placeDetails.formatted_address || '',
-          latitude: placeDetails.geometry.location.lat(),
-          longitude: placeDetails.geometry.location.lng(),
+          address: placeDetails.address || '',
+          latitude: placeDetails.latitude,
+          longitude: placeDetails.longitude,
         };
         addSearchHistory(suggestion.text, suggestion.placeId);
         setSelectedPlace(place);
         setMapPosition({ lat: place.latitude, lng: place.longitude });
         setQuery('');
+      } else {
+        showToast('場所の詳細を取得できませんでした', 'error');
       }
     } catch (error) {
       console.error('Failed to get place details:', error);
