@@ -462,7 +462,7 @@ export function SearchPage() {
           </div>
 
           {/* Row 2: Voice input + Typo fix buttons */}
-          <div className="flex gap-2 mt-2 flex-wrap">
+          <div className="flex gap-2 mt-2">
             <button
               onClick={startVoiceInput}
               disabled={isListening}
@@ -479,16 +479,20 @@ export function SearchPage() {
               <span>✨</span>
               <span>{isFixingTypos ? '修正中...' : '誤字修正'}</span>
             </button>
+          </div>
+
+          {/* Row 3: Quick search buttons - 横並び */}
+          <div className="flex gap-2 mt-2">
             <button
               onClick={() => handleQuickSearch('トイレ')}
-              className={`${glassButtonStyle} gap-1`}
+              className={`${glassButtonStyle} gap-1 flex-1`}
             >
               <span>🚻</span>
               <span>トイレを探す</span>
             </button>
             <button
               onClick={() => handleQuickSearch('コンビニ')}
-              className={`${glassButtonStyle} gap-1`}
+              className={`${glassButtonStyle} gap-1 flex-1`}
             >
               <span>🏪</span>
               <span>コンビニを探す</span>

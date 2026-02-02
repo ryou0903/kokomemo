@@ -47,36 +47,45 @@ export function PlaceCard({ place, onEdit, onNavigate }: PlaceCardProps) {
   return (
     <Card className="relative overflow-hidden">
       {/* 左側のカテゴリ色アクセントライン */}
-      <div className={`absolute left-0 top-0 bottom-0 w-1 ${categoryColor}`} />
+      <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${categoryColor}`} />
 
       <div className="pl-3 flex flex-col gap-2">
-        {/* ヘッダー: 場所名 + 日時 */}
-        <div className="flex justify-between items-start gap-2">
-          <h3 className="text-lg font-bold text-text flex-1 line-clamp-1">{place.name}</h3>
-          <span className="text-sm text-text-secondary whitespace-nowrap">
+        {/* ヘッダー: カテゴリ（左上） + 日時（右上） */}
+        <div className="flex justify-between items-center gap-2">
+          {categoryName && (
+            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-sm font-medium text-white ${categoryColor}`}>
+              {categoryName}
+            </span>
+          )}
+          <span className="text-sm text-text-secondary whitespace-nowrap ml-auto">
             {formattedDate} {formattedTime}
           </span>
         </div>
+
+        {/* 場所名 */}
+        <h3 className="text-lg font-bold text-text line-clamp-2">{place.name}</h3>
 
         {/* 住所 */}
         {place.address && (
           <p className="text-base text-text-secondary line-clamp-1">📍 {place.address}</p>
         )}
 
-        {/* カテゴリバッジとメモ */}
-        <div className="flex items-center gap-2 flex-wrap">
-          {categoryName && (
-            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-sm font-medium text-white ${categoryColor}`}>
-              {categoryName}
-            </span>
-          )}
-          {place.memo && (
-            <span className="text-sm text-text-secondary line-clamp-1 flex-1">💬 {place.memo}</span>
-          )}
-        </div>
+        {/* メモ */}
+        {place.memo && (
+          <p className="text-sm text-text-secondary line-clamp-1">💬 {place.memo}</p>
+        )}
 
-        {/* アクションボタン */}
+        {/* アクションボタン - 編集（左）、ナビ開始（右） */}
         <div className="flex gap-2 mt-1">
+          <Button
+            variant="secondary"
+            size="small"
+            icon="✏️"
+            onClick={() => onEdit(place)}
+            className="flex-1"
+          >
+            編集
+          </Button>
           <Button
             variant="primary"
             size="small"
@@ -85,15 +94,6 @@ export function PlaceCard({ place, onEdit, onNavigate }: PlaceCardProps) {
             className="flex-1"
           >
             ナビ開始
-          </Button>
-          <Button
-            variant="secondary"
-            size="small"
-            icon="✏️"
-            onClick={() => onEdit(place)}
-            className="flex-none"
-          >
-            編集
           </Button>
         </div>
       </div>

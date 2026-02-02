@@ -97,10 +97,10 @@ export function HomePage() {
           </Button>
         </div>
 
-        {/* Places Section */}
-        <div className="flex-1 flex flex-col">
+        {/* Places Section - グループとして区切り */}
+        <div className="flex-1 flex flex-col mx-4 mt-2 bg-surface rounded-2xl border border-border overflow-hidden">
           {/* Section Header */}
-          <div className="px-4 py-3 flex items-center justify-between">
+          <div className="px-4 py-3 flex items-center justify-between border-b border-border bg-gray-50/50">
             <h2 className="text-lg font-bold text-text">登録した場所</h2>
             <button
               onClick={() => navigate('/calendar')}
@@ -111,30 +111,26 @@ export function HomePage() {
             </button>
           </div>
 
-          {/* Category and Sort Selects */}
-          <div className="px-4 py-2 flex gap-3">
+          {/* Category and Sort Selects - 縦並びで見やすく */}
+          <div className="px-4 py-3 flex flex-col gap-2 border-b border-border">
             {/* Category Dropdown */}
-            <div className="flex-1 min-w-0">
-              <select
-                value={activeTabId}
-                onChange={(e) => setActiveTabId(e.target.value)}
-                className="w-full px-3 py-2.5 text-base font-medium rounded-lg border border-border bg-white text-text cursor-pointer hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary/30 truncate"
-              >
-                {tabs.map((tab) => (
-                  <option key={tab.id} value={tab.id}>
-                    {`カテゴリ: ${tab.name}`}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <select
+              value={activeTabId}
+              onChange={(e) => setActiveTabId(e.target.value)}
+              className="w-full px-4 py-3 text-base font-medium rounded-lg border border-border bg-white text-text cursor-pointer hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary/30"
+            >
+              {tabs.map((tab) => (
+                <option key={tab.id} value={tab.id}>
+                  {`カテゴリ: ${tab.name}`}
+                </option>
+              ))}
+            </select>
             {/* Sort Select */}
-            <div className="flex-1 min-w-0">
-              <SortSelect value={sortOption} onChange={setSortOption} />
-            </div>
+            <SortSelect value={sortOption} onChange={setSortOption} />
           </div>
 
           {/* Place Cards */}
-          <div className="flex-1 px-4 py-2 overflow-y-auto">
+          <div className="flex-1 p-3 overflow-y-auto">
             {filteredPlaces.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-8 text-center">
                 <p className="text-5xl mb-3">📍</p>
