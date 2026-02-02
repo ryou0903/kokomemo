@@ -82,7 +82,7 @@ export function PlaceCard({ place, onEdit, onNavigate }: PlaceCardProps) {
             size="small"
             icon="✏️"
             onClick={() => onEdit(place)}
-            className="flex-1"
+            className="flex-1 whitespace-nowrap"
           >
             編集
           </Button>
@@ -91,7 +91,7 @@ export function PlaceCard({ place, onEdit, onNavigate }: PlaceCardProps) {
             size="small"
             icon="🚗"
             onClick={handleNavigate}
-            className="flex-1"
+            className="flex-1 whitespace-nowrap"
           >
             ナビ開始
           </Button>

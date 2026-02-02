@@ -97,10 +97,10 @@ export function HomePage() {
           </Button>
         </div>
 
-        {/* Places Section - グループとして区切り */}
-        <div className="flex-1 flex flex-col mx-4 mt-2 bg-surface rounded-2xl border border-border overflow-hidden">
+        {/* Places Section - 上部で区切り、左右余白なし */}
+        <div className="flex-1 flex flex-col mt-2 border-t border-border">
           {/* Section Header */}
-          <div className="px-4 py-3 flex items-center justify-between border-b border-border bg-gray-50/50">
+          <div className="px-4 py-3 flex items-center justify-between">
             <h2 className="text-lg font-bold text-text">登録した場所</h2>
             <button
               onClick={() => navigate('/calendar')}
@@ -112,7 +112,7 @@ export function HomePage() {
           </div>
 
           {/* Category and Sort Selects - 縦並びで見やすく */}
-          <div className="px-4 py-3 flex flex-col gap-2 border-b border-border">
+          <div className="px-4 pb-3 flex flex-col gap-2">
             {/* Category Dropdown */}
             <select
               value={activeTabId}
@@ -130,7 +130,7 @@ export function HomePage() {
           </div>
 
           {/* Place Cards */}
-          <div className="flex-1 p-3 overflow-y-auto">
+          <div className="flex-1 px-4 pb-4 overflow-y-auto">
             {filteredPlaces.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-8 text-center">
                 <p className="text-5xl mb-3">📍</p>
