@@ -485,14 +485,14 @@ export function SearchPage() {
           <div className="flex gap-2 mt-2">
             <button
               onClick={() => handleQuickSearch('トイレ')}
-              className={`${glassButtonStyle} gap-1 flex-1`}
+              className={`${glassButtonStyle} gap-1 flex-1 whitespace-nowrap`}
             >
               <span>🚻</span>
               <span>トイレを探す</span>
             </button>
             <button
               onClick={() => handleQuickSearch('コンビニ')}
-              className={`${glassButtonStyle} gap-1 flex-1`}
+              className={`${glassButtonStyle} gap-1 flex-1 whitespace-nowrap`}
             >
               <span>🏪</span>
               <span>コンビニを探す</span>
