@@ -8,17 +8,42 @@ interface UseGoogleMapsOptions {
 interface UseGoogleMapsResult {
   isLoaded: boolean;
   loadError: Error | null;
+  authError: string | null;
 }
 
 let isScriptLoading = false;
 let isScriptLoaded = false;
 const loadCallbacks: (() => void)[] = [];
+let globalAuthError: string | null = null;
+const authErrorCallbacks: ((error: string) => void)[] = [];
 
 const DEFAULT_LIBRARIES = ['places'];
+
+// Google Maps認証エラーのグローバルハンドラー
+if (typeof window !== 'undefined') {
+  (window as any).gm_authFailure = () => {
+    const errorMsg = 'Google Maps API認証エラー: APIキーまたは課金設定を確認してください';
+    console.error(errorMsg);
+    globalAuthError = errorMsg;
+    authErrorCallbacks.forEach(cb => cb(errorMsg));
+  };
+}
 
 export function useGoogleMaps({ apiKey, libraries = DEFAULT_LIBRARIES }: UseGoogleMapsOptions): UseGoogleMapsResult {
   const [isLoaded, setIsLoaded] = useState(isScriptLoaded);
   const [loadError, setLoadError] = useState<Error | null>(null);
+  const [authError, setAuthError] = useState<string | null>(globalAuthError);
+
+  useEffect(() => {
+    // 認証エラーコールバックを登録
+    const handleAuthError = (error: string) => setAuthError(error);
+    authErrorCallbacks.push(handleAuthError);
+
+    return () => {
+      const index = authErrorCallbacks.indexOf(handleAuthError);
+      if (index > -1) authErrorCallbacks.splice(index, 1);
+    };
+  }, []);
 
   useEffect(() => {
     if (!apiKey) {
@@ -40,11 +65,12 @@ export function useGoogleMaps({ apiKey, libraries = DEFAULT_LIBRARIES }: UseGoog
     isScriptLoading = true;
 
     const script = document.createElement('script');
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=${libraries.join(',')}&language=ja`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=${libraries.join(',')}&language=ja&callback=__googleMapsCallback`;
     script.async = true;
     script.defer = true;
 
-    script.onload = () => {
+    // コールバック関数を設定
+    (window as any).__googleMapsCallback = () => {
       isScriptLoaded = true;
       isScriptLoading = false;
       setIsLoaded(true);
@@ -61,7 +87,7 @@ export function useGoogleMaps({ apiKey, libraries = DEFAULT_LIBRARIES }: UseGoog
     document.head.appendChild(script);
   }, [apiKey]);
 
-  return { isLoaded, loadError };
+  return { isLoaded, loadError, authError };
 }
 
 export function usePlacesAutocomplete(isGoogleLoaded: boolean) {

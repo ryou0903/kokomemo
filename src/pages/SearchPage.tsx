@@ -72,7 +72,7 @@ export function SearchPage() {
   const [mapPosition, setMapPosition] = useState<{ lat: number; lng: number } | null>(null);
   const [isLoadingInitialLocation, setIsLoadingInitialLocation] = useState(true);
 
-  const { isLoaded, loadError } = useGoogleMaps({ apiKey: GOOGLE_MAPS_API_KEY });
+  const { isLoaded, loadError, authError } = useGoogleMaps({ apiKey: GOOGLE_MAPS_API_KEY });
 
   const debounceRef = useRef<number | null>(null);
   const queryRef = useRef(query);
@@ -132,6 +132,13 @@ export function SearchPage() {
       showToast('Google Maps APIの読み込みに失敗しました', 'error');
     }
   }, [loadError, showToast]);
+
+  useEffect(() => {
+    if (authError) {
+      console.error('Google Maps auth error:', authError);
+      showToast(authError, 'error');
+    }
+  }, [authError, showToast]);
 
   // Voice input using Web Speech API
   const startVoiceInput = useCallback(() => {
@@ -577,6 +584,22 @@ export function SearchPage() {
         <div className="absolute inset-0 flex items-center justify-center">
           <div className={`${glassStyle} rounded-2xl p-6 mx-4 text-center`}>
             <p className="text-text-secondary">Google Maps APIキーが設定されていません</p>
+          </div>
+        </div>
+      )}
+
+      {/* Auth error message */}
+      {authError && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div className={`${glassStyle} rounded-2xl p-6 mx-4 text-center pointer-events-auto`}>
+            <p className="text-danger font-bold mb-2">認証エラー</p>
+            <p className="text-text-secondary text-sm mb-3">{authError}</p>
+            <p className="text-text-secondary text-xs">
+              Google Cloud Consoleで以下を確認してください：<br/>
+              1. Maps JavaScript APIが有効<br/>
+              2. 課金が設定されている<br/>
+              3. APIキーの制限設定
+            </p>
           </div>
         </div>
       )}
