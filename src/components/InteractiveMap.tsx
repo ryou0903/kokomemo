@@ -360,7 +360,9 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
         zoom: 16,
         disableDefaultUI: true,
         zoomControl: true,
+        rotateControl: true, // 回転コントロールを有効化
         gestureHandling: 'greedy',
+        heading: 0, // 初期の向き（北向き）
         // AdvancedMarkerが使える場合のみmapIdをセット（ベクターマップ）
         // レガシーモードではmapIdなし（ラスターマップ = 軽量）
         ...(useAdvancedMarker ? { mapId: 'kokomemo-map' } : {}),

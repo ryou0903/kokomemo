@@ -70,13 +70,14 @@ export function SearchPage() {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [selectedPlace, setSelectedPlace] = useState<PlaceResult | null>(null);
   const [mapPosition, setMapPosition] = useState<{ lat: number; lng: number } | null>(null);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null); // ユーザーの実際の現在地
   const [isLoadingInitialLocation, setIsLoadingInitialLocation] = useState(true);
 
   const { isLoaded, loadError, authError } = useGoogleMaps({ apiKey: GOOGLE_MAPS_API_KEY });
 
   const debounceRef = useRef<number | null>(null);
   const queryRef = useRef(query);
-  const mapPositionRef = useRef(mapPosition);
+  const userLocationRef = useRef(userLocation); // 検索時の距離計算用
 
   // Get current location on mount with timeout fallback
   useEffect(() => {
@@ -96,7 +97,9 @@ export function SearchPage() {
       .then((loc) => {
         if (isMounted && !positionSet) {
           positionSet = true;
-          setMapPosition({ lat: loc.latitude, lng: loc.longitude });
+          const location = { lat: loc.latitude, lng: loc.longitude };
+          setMapPosition(location);
+          setUserLocation(location); // ユーザーの現在地を保存
           clearTimeout(timeoutId);
           setIsLoadingInitialLocation(false);
         }
@@ -123,8 +126,8 @@ export function SearchPage() {
   }, [query]);
 
   useEffect(() => {
-    mapPositionRef.current = mapPosition;
-  }, [mapPosition]);
+    userLocationRef.current = userLocation;
+  }, [userLocation]);
 
   useEffect(() => {
     if (loadError) {
@@ -247,7 +250,8 @@ export function SearchPage() {
     }
 
     try {
-      const origin = mapPositionRef.current || undefined;
+      // 距離計算はユーザーの現在地を基準にする（ピンの位置ではなく）
+      const origin = userLocationRef.current || undefined;
 
       // 1. オートコンプリート取得（REST API）
       let autocompleteResults: AutocompleteResult[] = [];

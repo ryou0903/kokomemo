@@ -224,6 +224,19 @@ export interface AutocompleteResult {
   distanceMeters?: number;
 }
 
+// 電話番号かどうかを判定
+function isPhoneNumber(input: string): boolean {
+  // 日本の電話番号パターン: 0から始まる数字、ハイフン、スペース、括弧を含む
+  const cleaned = input.replace(/[\s\-\(\)]/g, '');
+  return /^0\d{9,10}$/.test(cleaned) || /^\d{2,4}-\d{2,4}-\d{4}$/.test(input.replace(/\s/g, ''));
+}
+
+// 電話番号をフォーマット（検索用）
+function formatPhoneForSearch(input: string): string {
+  // ハイフンやスペースを除去して数字のみに
+  return input.replace(/[\s\-\(\)]/g, '');
+}
+
 // REST APIベースのオートコンプリート（JavaScript APIが動作しない古いデバイス用）
 export async function searchAutocomplete(
   input: string,
@@ -232,6 +245,11 @@ export async function searchAutocomplete(
 ): Promise<AutocompleteResult[]> {
   if (!input.trim() || typeof fetch === 'undefined') {
     return [];
+  }
+
+  // 電話番号の場合はText Search APIを使用
+  if (isPhoneNumber(input)) {
+    return searchByPhoneNumber(input, apiKey, location);
   }
 
   const url = 'https://places.googleapis.com/v1/places:autocomplete';
@@ -299,6 +317,85 @@ export async function searchAutocomplete(
       console.warn('Autocomplete timed out');
     } else {
       console.warn('Autocomplete error:', error);
+    }
+    return [];
+  }
+}
+
+// 電話番号で場所を検索（Text Search API使用）
+async function searchByPhoneNumber(
+  phoneNumber: string,
+  apiKey: string,
+  location?: { lat: number; lng: number }
+): Promise<AutocompleteResult[]> {
+  const url = 'https://places.googleapis.com/v1/places:searchText';
+
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timeoutId = controller ? setTimeout(() => controller.abort(), 5000) : null;
+
+  try {
+    const requestBody: any = {
+      textQuery: phoneNumber,
+      languageCode: 'ja',
+      regionCode: 'JP',
+      maxResultCount: 10,
+    };
+
+    // 現在地がある場合はlocationBiasを追加
+    if (location) {
+      requestBody.locationBias = {
+        circle: {
+          center: { latitude: location.lat, longitude: location.lng },
+          radius: 50000 // 50km
+        }
+      };
+    }
+
+    const fetchOptions: RequestInit = {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': apiKey,
+        'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.location'
+      },
+      body: JSON.stringify(requestBody)
+    };
+
+    if (controller) {
+      fetchOptions.signal = controller.signal;
+    }
+
+    const response = await fetch(url, fetchOptions);
+
+    if (timeoutId) clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      console.warn('Phone search API error:', response.status, response.statusText);
+      return [];
+    }
+
+    const data = await response.json();
+
+    if (!data.places) return [];
+
+    return data.places.map((place: any) => {
+      const distanceMeters = location
+        ? calculateDistance(location.lat, location.lng, place.location?.latitude || 0, place.location?.longitude || 0)
+        : undefined;
+
+      return {
+        placeId: (place.id || '').replace(/^places\//, ''),
+        mainText: place.displayName?.text || '',
+        secondaryText: place.formattedAddress || '',
+        distanceMeters,
+      };
+    });
+  } catch (error) {
+    if (timeoutId) clearTimeout(timeoutId);
+    if (error instanceof Error && error.name === 'AbortError') {
+      console.warn('Phone search timed out');
+    } else {
+      console.warn('Phone search error:', error);
     }
     return [];
   }
