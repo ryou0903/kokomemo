@@ -425,14 +425,14 @@ export function SearchPage() {
           longitude={selectedPlace?.longitude ?? mapPosition.lng}
           isLoaded={isLoaded}
           hideCurrentLocationButton={!!selectedPlace}
-          onLocationChange={(lat, lng, address, name) => {
+          onLocationChange={(lat, lng, address, name, postalCode) => {
             // ピンを刺した時は常にモーダルを表示
             const parsed = parseAddress(address);
             setSelectedPlace({
               placeId: `pin-${Date.now()}`,
               name: name || parsed.address.split(',')[0] || '選択した場所',
               address: parsed.address,
-              postalCode: parsed.postalCode,
+              postalCode: postalCode || parsed.postalCode,
               latitude: lat,
               longitude: lng,
             });
