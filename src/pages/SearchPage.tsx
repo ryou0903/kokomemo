@@ -428,7 +428,7 @@ export function SearchPage() {
           longitude={selectedPlace?.longitude ?? mapPosition.lng}
           isLoaded={isLoaded}
           hideCurrentLocationButton={!!selectedPlace}
-          onLocationChange={(lat, lng, address, name, postalCode) => {
+          onLocationChange={(lat, lng, address, name, postalCode, phoneNumber) => {
             // ピンを刺した時は常にモーダルを表示
             const parsed = parseAddress(address);
             setSelectedPlace({
@@ -436,6 +436,7 @@ export function SearchPage() {
               name: name || parsed.address.split(',')[0] || '選択した場所',
               address: parsed.address,
               postalCode: postalCode || parsed.postalCode,
+              phoneNumber,
               latitude: lat,
               longitude: lng,
             });

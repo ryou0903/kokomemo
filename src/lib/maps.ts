@@ -59,6 +59,7 @@ export interface ReverseGeocodeResult {
   address: string;
   placeName?: string;
   postalCode?: string;
+  phoneNumber?: string;
 }
 
 export async function reverseGeocode(
@@ -126,10 +127,14 @@ export async function reverseGeocode(
       }
     }
 
+    // ピンの位置に店舗等がある場合、電話番号を取得
+    const placeAtLocation = await getPlaceAtLocation(latitude, longitude, apiKey);
+
     return {
-      address,
-      placeName,
-      postalCode,
+      address: placeAtLocation?.address || address,
+      placeName: placeAtLocation?.name || placeName,
+      postalCode: placeAtLocation?.postalCode || postalCode,
+      phoneNumber: placeAtLocation?.phoneNumber,
     };
   } catch (error) {
     console.error('Reverse geocode error:', error);
@@ -145,6 +150,73 @@ export interface PlaceSearchResult {
   longitude: number;
   phoneNumber?: string;
   postalCode?: string;
+}
+
+// ピンの位置にある店舗等を検索（電話番号取得用）
+async function getPlaceAtLocation(
+  latitude: number,
+  longitude: number,
+  apiKey: string
+): Promise<PlaceSearchResult | null> {
+  if (typeof fetch === 'undefined') return null;
+
+  const url = 'https://places.googleapis.com/v1/places:searchNearby';
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': apiKey,
+        'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.location,places.nationalPhoneNumber,places.addressComponents'
+      },
+      body: JSON.stringify({
+        locationRestriction: {
+          circle: {
+            center: { latitude, longitude },
+            radius: 30 // 30m以内の店舗を検索
+          }
+        },
+        maxResultCount: 1,
+        languageCode: 'ja'
+      })
+    });
+
+    if (!response.ok) return null;
+
+    const data = await response.json();
+
+    if (!data.places || data.places.length === 0) return null;
+
+    const place = data.places[0];
+
+    // 郵便番号を取得
+    let postalCode: string | undefined;
+    if (place.addressComponents) {
+      for (const component of place.addressComponents) {
+        if (component.types?.includes('postal_code')) {
+          postalCode = component.longText || component.shortText;
+          if (postalCode && !postalCode.includes('-') && postalCode.length === 7) {
+            postalCode = postalCode.slice(0, 3) + '-' + postalCode.slice(3);
+          }
+          break;
+        }
+      }
+    }
+
+    return {
+      placeId: (place.id || '').replace(/^places\//, ''),
+      name: place.displayName?.text || '',
+      address: place.formattedAddress || '',
+      latitude: place.location?.latitude || latitude,
+      longitude: place.location?.longitude || longitude,
+      phoneNumber: place.nationalPhoneNumber || undefined,
+      postalCode,
+    };
+  } catch (error) {
+    console.warn('getPlaceAtLocation error:', error);
+    return null;
+  }
 }
 
 let autocompleteService: google.maps.places.AutocompleteService | null = null;
