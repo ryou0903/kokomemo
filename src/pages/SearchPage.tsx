@@ -18,6 +18,7 @@ interface PlaceResult {
   name: string;
   address: string;
   postalCode?: string;
+  phoneNumber?: string;
   latitude: number;
   longitude: number;
 }
@@ -344,11 +345,14 @@ export function SearchPage() {
       const placeDetails = await getPlaceDetailsRest(suggestion.placeId, GOOGLE_MAPS_API_KEY);
       if (placeDetails) {
         const parsed = parseAddress(placeDetails.address || '');
+        // APIから直接取得した郵便番号を優先、なければ住所からパース
+        const postalCode = placeDetails.postalCode || parsed.postalCode;
         const place: PlaceResult = {
           placeId: placeDetails.placeId,
           name: placeDetails.name || suggestion.text,
           address: parsed.address,
-          postalCode: parsed.postalCode,
+          postalCode,
+          phoneNumber: placeDetails.phoneNumber,
           latitude: placeDetails.latitude,
           longitude: placeDetails.longitude,
         };
@@ -376,6 +380,9 @@ export function SearchPage() {
       lat: selectedPlace.latitude.toString(),
       lng: selectedPlace.longitude.toString(),
     });
+    if (selectedPlace.postalCode) {
+      params.set('postalCode', selectedPlace.postalCode);
+    }
     navigate(`/place/new?${params.toString()}`);
   };
 
@@ -546,6 +553,15 @@ export function SearchPage() {
             <p className="text-sm text-text-secondary">{selectedPlace.address}</p>
             {selectedPlace.postalCode && (
               <p className="text-xs text-text-secondary mt-0.5">〒{selectedPlace.postalCode}</p>
+            )}
+            {selectedPlace.phoneNumber && (
+              <a
+                href={`tel:${selectedPlace.phoneNumber}`}
+                className="inline-flex items-center gap-1 text-sm text-primary mt-1"
+              >
+                <span>📞</span>
+                <span>{selectedPlace.phoneNumber}</span>
+              </a>
             )}
           </div>
 
