@@ -365,7 +365,7 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
         heading: 0, // 初期の向き（北向き）
         // AdvancedMarkerが使える場合のみmapIdをセット（ベクターマップ）
         // レガシーモードではmapIdなし（ラスターマップ = 軽量）
-        ...(useAdvancedMarker ? { mapId: 'kokomemo-map' } : {}),
+        ...(useAdvancedMarker ? { mapId: 'beb6a1a1948d99b3c48f07da' } : {}),
       };
 
       const map = new Map(mapRef.current!, mapOptions);
