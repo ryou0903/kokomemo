@@ -6,7 +6,7 @@ const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
 interface InteractiveMapProps {
   latitude: number;
   longitude: number;
-  onLocationChange?: (lat: number, lng: number, address: string, name?: string, postalCode?: string) => void;
+  onLocationChange?: (lat: number, lng: number, address: string, name?: string, postalCode?: string, phoneNumber?: string) => void;
   isLoaded: boolean;
   hideCurrentLocationButton?: boolean;
 }
@@ -389,7 +389,7 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
             setIsLoadingLocation(true);
             try {
               const result = await reverseGeocode(position.lat, position.lng, GOOGLE_MAPS_API_KEY);
-              onLocationChangeRef.current(position.lat, position.lng, result.address, result.placeName, result.postalCode);
+              onLocationChangeRef.current(position.lat, position.lng, result.address, result.placeName, result.postalCode, result.phoneNumber);
             } catch (error) {
               console.error('Reverse geocode error:', error);
               onLocationChangeRef.current(position.lat, position.lng, `${position.lat.toFixed(6)}, ${position.lng.toFixed(6)}`);
@@ -415,7 +415,7 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
             setIsLoadingLocation(true);
             try {
               const result = await reverseGeocode(lat, lng, GOOGLE_MAPS_API_KEY);
-              onLocationChangeRef.current(lat, lng, result.address, result.placeName, result.postalCode);
+              onLocationChangeRef.current(lat, lng, result.address, result.placeName, result.postalCode, result.phoneNumber);
             } catch (error) {
               console.error('Reverse geocode error:', error);
               onLocationChangeRef.current(lat, lng, `${lat.toFixed(6)}, ${lng.toFixed(6)}`);
@@ -504,7 +504,7 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
             setIsLoadingLocation(true);
             try {
               const result = await reverseGeocode(lat, lng, GOOGLE_MAPS_API_KEY);
-              onLocationChangeRef.current(lat, lng, result.address, result.placeName, result.postalCode);
+              onLocationChangeRef.current(lat, lng, result.address, result.placeName, result.postalCode, result.phoneNumber);
             } catch (error) {
               console.error('Reverse geocode error:', error);
               onLocationChangeRef.current(lat, lng, `${lat.toFixed(6)}, ${lng.toFixed(6)}`);
