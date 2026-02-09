@@ -231,12 +231,6 @@ function isPhoneNumber(input: string): boolean {
   return /^0\d{9,10}$/.test(cleaned) || /^\d{2,4}-\d{2,4}-\d{4}$/.test(input.replace(/\s/g, ''));
 }
 
-// 電話番号をフォーマット（検索用）
-function formatPhoneForSearch(input: string): string {
-  // ハイフンやスペースを除去して数字のみに
-  return input.replace(/[\s\-\(\)]/g, '');
-}
-
 // REST APIベースのオートコンプリート（JavaScript APIが動作しない古いデバイス用）
 export async function searchAutocomplete(
   input: string,
