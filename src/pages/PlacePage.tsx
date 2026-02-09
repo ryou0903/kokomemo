@@ -50,6 +50,7 @@ export function PlacePage() {
   const prefillAddress = searchParams.get('address');
   const prefillLat = searchParams.get('lat');
   const prefillLng = searchParams.get('lng');
+  const prefillPostalCode = searchParams.get('postalCode');
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -125,7 +126,10 @@ export function PlacePage() {
         if (prefillAddress) {
           const parsed = parseAddress(prefillAddress);
           setAddress(parsed.address);
-          setPostalCode(parsed.postalCode);
+          // URLパラメータの郵便番号を優先、なければパースした結果を使用
+          setPostalCode(prefillPostalCode || parsed.postalCode);
+        } else if (prefillPostalCode) {
+          setPostalCode(prefillPostalCode);
         }
         setLatitude(parseFloat(prefillLat));
         setLongitude(parseFloat(prefillLng));
@@ -135,7 +139,7 @@ export function PlacePage() {
     };
 
     loadData();
-  }, [id, isNew, useCurrentLocation, prefillName, prefillAddress, prefillLat, prefillLng, navigate, showToast]);
+  }, [id, isNew, useCurrentLocation, prefillName, prefillAddress, prefillLat, prefillLng, prefillPostalCode, navigate, showToast]);
 
   const validate = useCallback(() => {
     const newErrors: { name?: string } = {};
