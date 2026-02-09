@@ -72,7 +72,10 @@ export async function reverseGeocode(
     const response = await fetch(url);
     const data = await response.json();
 
+    console.log('Geocoding API response:', { status: data.status, error_message: data.error_message, results_count: data.results?.length });
+
     if (data.status !== 'OK' || !data.results?.length) {
+      console.warn('Geocoding failed:', data.status, data.error_message);
       return { address: `${latitude.toFixed(6)}, ${longitude.toFixed(6)}` };
     }
 

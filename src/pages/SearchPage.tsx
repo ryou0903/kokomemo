@@ -383,6 +383,9 @@ export function SearchPage() {
     if (selectedPlace.postalCode) {
       params.set('postalCode', selectedPlace.postalCode);
     }
+    if (selectedPlace.phoneNumber) {
+      params.set('phoneNumber', selectedPlace.phoneNumber);
+    }
     navigate(`/place/new?${params.toString()}`);
   };
 
