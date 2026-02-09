@@ -51,6 +51,7 @@ export function PlacePage() {
   const prefillLat = searchParams.get('lat');
   const prefillLng = searchParams.get('lng');
   const prefillPostalCode = searchParams.get('postalCode');
+  const prefillPhoneNumber = searchParams.get('phoneNumber');
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -61,6 +62,7 @@ export function PlacePage() {
   const [memo, setMemo] = useState('');
   const [address, setAddress] = useState('');
   const [postalCode, setPostalCode] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
   const [latitude, setLatitude] = useState(0);
   const [longitude, setLongitude] = useState(0);
   const [tabId, setTabId] = useState('frequent');
@@ -131,6 +133,9 @@ export function PlacePage() {
         } else if (prefillPostalCode) {
           setPostalCode(prefillPostalCode);
         }
+        if (prefillPhoneNumber) {
+          setPhoneNumber(prefillPhoneNumber);
+        }
         setLatitude(parseFloat(prefillLat));
         setLongitude(parseFloat(prefillLng));
       }
@@ -139,7 +144,7 @@ export function PlacePage() {
     };
 
     loadData();
-  }, [id, isNew, useCurrentLocation, prefillName, prefillAddress, prefillLat, prefillLng, prefillPostalCode, navigate, showToast]);
+  }, [id, isNew, useCurrentLocation, prefillName, prefillAddress, prefillLat, prefillLng, prefillPostalCode, prefillPhoneNumber, navigate, showToast]);
 
   const validate = useCallback(() => {
     const newErrors: { name?: string } = {};
@@ -238,6 +243,20 @@ export function PlacePage() {
             onChange={(e) => setPostalCode(e.target.value)}
             placeholder="例: 299-3233"
           />
+
+          {/* 電話番号 */}
+          {phoneNumber && (
+            <div className="flex flex-col gap-2">
+              <p className="text-base font-bold text-text">電話番号</p>
+              <a
+                href={`tel:${phoneNumber}`}
+                className="flex items-center gap-2 px-4 py-3 bg-white border border-border rounded-lg text-primary"
+              >
+                <span>📞</span>
+                <span>{phoneNumber}</span>
+              </a>
+            </div>
+          )}
 
           <Textarea
             label="メモ（任意）"
