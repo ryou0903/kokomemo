@@ -68,50 +68,70 @@ export async function reverseGeocode(
 ): Promise<ReverseGeocodeResult> {
   const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${apiKey}&language=ja`;
 
-  const response = await fetch(url);
-  const data = await response.json();
+  try {
+    const response = await fetch(url);
+    const data = await response.json();
 
-  if (data.status !== 'OK' || !data.results?.length) {
+    if (data.status !== 'OK' || !data.results?.length) {
+      return { address: `${latitude.toFixed(6)}, ${longitude.toFixed(6)}` };
+    }
+
+    const result = data.results[0];
+    const fullAddress = result.formatted_address || '';
+
+    // address_componentsから郵便番号を取得
+    let postalCode: string | undefined;
+    for (const component of result.address_components || []) {
+      if (component.types?.includes('postal_code')) {
+        postalCode = component.long_name;
+        // ハイフンがない場合は追加
+        if (postalCode && !postalCode.includes('-') && postalCode.length === 7) {
+          postalCode = postalCode.slice(0, 3) + '-' + postalCode.slice(3);
+        }
+        break;
+      }
+    }
+
+    // 郵便番号がaddress_componentsにない場合、formatted_addressから抽出を試みる
+    if (!postalCode) {
+      const postalMatch = fullAddress.match(/〒?\s*(\d{3}-?\d{4})/);
+      if (postalMatch) {
+        postalCode = postalMatch[1].includes('-')
+          ? postalMatch[1]
+          : postalMatch[1].slice(0, 3) + '-' + postalMatch[1].slice(3);
+      }
+    }
+
+    // 住所から国名と郵便番号を除去
+    let address = fullAddress
+      .replace(/^日本、?\s*/, '')
+      .replace(/〒?\s*\d{3}-?\d{4}\s*/, '')
+      .replace(/^[,、\s]+/, '')
+      .trim();
+
+    // Try to find a more specific place name
+    let placeName: string | undefined;
+    for (const r of data.results) {
+      const types = r.types || [];
+      if (
+        types.includes('point_of_interest') ||
+        types.includes('establishment') ||
+        types.includes('premise')
+      ) {
+        placeName = r.name || r.formatted_address?.split(',')[0];
+        break;
+      }
+    }
+
+    return {
+      address,
+      placeName,
+      postalCode,
+    };
+  } catch (error) {
+    console.error('Reverse geocode error:', error);
     return { address: `${latitude.toFixed(6)}, ${longitude.toFixed(6)}` };
   }
-
-  const result = data.results[0];
-  const fullAddress = result.formatted_address || '';
-
-  // 郵便番号を抽出
-  let postalCode: string | undefined;
-  const postalMatch = fullAddress.match(/〒?\s*(\d{3}-?\d{4})/);
-  if (postalMatch) {
-    postalCode = postalMatch[1].includes('-')
-      ? postalMatch[1]
-      : postalMatch[1].slice(0, 3) + '-' + postalMatch[1].slice(3);
-  }
-
-  // 住所から国名と郵便番号を除去
-  let address = fullAddress
-    .replace(/^日本、?\s*/, '')
-    .replace(/〒?\s*\d{3}-?\d{4}\s*/, '')
-    .trim();
-
-  // Try to find a more specific place name
-  let placeName: string | undefined;
-  for (const r of data.results) {
-    const types = r.types || [];
-    if (
-      types.includes('point_of_interest') ||
-      types.includes('establishment') ||
-      types.includes('premise')
-    ) {
-      placeName = r.name || r.formatted_address?.split(',')[0];
-      break;
-    }
-  }
-
-  return {
-    address,
-    placeName,
-    postalCode,
-  };
 }
 
 export interface PlaceSearchResult {
@@ -120,6 +140,8 @@ export interface PlaceSearchResult {
   address: string;
   latitude: number;
   longitude: number;
+  phoneNumber?: string;
+  postalCode?: string;
 }
 
 let autocompleteService: google.maps.places.AutocompleteService | null = null;
@@ -424,7 +446,7 @@ export async function getPlaceDetailsRest(
       method: 'GET',
       headers: {
         'X-Goog-Api-Key': apiKey,
-        'X-Goog-FieldMask': 'id,displayName,formattedAddress,location',
+        'X-Goog-FieldMask': 'id,displayName,formattedAddress,location,nationalPhoneNumber,addressComponents',
       },
     };
 
@@ -457,12 +479,29 @@ export async function getPlaceDetailsRest(
       return null;
     }
 
+    // 郵便番号をaddressComponentsから抽出
+    let postalCode: string | undefined;
+    if (data.addressComponents) {
+      for (const component of data.addressComponents) {
+        if (component.types?.includes('postal_code')) {
+          postalCode = component.longText || component.shortText;
+          // ハイフンがない場合は追加
+          if (postalCode && !postalCode.includes('-') && postalCode.length === 7) {
+            postalCode = postalCode.slice(0, 3) + '-' + postalCode.slice(3);
+          }
+          break;
+        }
+      }
+    }
+
     return {
       placeId: normalizedPlaceId,
       name: data.displayName?.text || '',
       address: data.formattedAddress || '',
       latitude: data.location.latitude,
       longitude: data.location.longitude,
+      phoneNumber: data.nationalPhoneNumber || undefined,
+      postalCode,
     };
   } catch (error) {
     if (timeoutId) clearTimeout(timeoutId);
