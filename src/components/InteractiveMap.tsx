@@ -144,11 +144,8 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
       // Android: deviceorientationabsolute gives compass heading
       absoluteSupported = true;
       if (event.alpha !== null) {
-        // alpha: 0〜360度
-        // Androidではalphaは反時計回り（北から西方向に増加）で報告される端末が多い
-        // 時計回り（北から東方向に増加）に変換: 360 - alpha
-        const compassHeading = (360 - event.alpha) % 360;
-        setHeading(compassHeading);
+        // alphaをそのまま使用（端末によって解釈が異なる場合がある）
+        setHeading(event.alpha);
         setHasOrientationSensor(true);
       }
     };
@@ -664,14 +661,13 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
 
     if (indicator) {
       if (heading !== null && hasOrientationSensor) {
-        // heading: デバイスのコンパス方位（0=北, 90=東, 180=南, 270=西）
-        // mapHeading: 地図の回転角度（0=北が上, 90=東が上）
+        // heading: デバイスのコンパス方位（alpha値）
+        // mapHeading: 地図の回転角度
         //
-        // ビームは画面上で「ユーザーが向いている方向」を指す必要がある
-        // 地図が回転すると、同じコンパス方位でも画面上の位置が変わる
-        // 例: 北を向いている(heading=0)時、地図が東向き(mapHeading=90)なら
-        //     ビームは画面の左(270度)を指すべき
-        const visualRotation = ((heading - mapHeading) % 360 + 360) % 360;
+        // AdvancedMarkerのコンテンツは地図の回転に追従するため、
+        // 地図の回転分を足して補正する必要がある
+        // また、ビームの向きを正しくするために180度加算
+        const visualRotation = ((heading + mapHeading + 180) % 360 + 360) % 360;
 
         indicator.style.transform = `rotate(${visualRotation}deg)`;
         indicator.style.opacity = '1';
