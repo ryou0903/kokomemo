@@ -14,6 +14,7 @@ import { Button, Input, Textarea, Loading, ConfirmDialog } from '../components/u
 import { useToast } from '../contexts/ToastContext';
 
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
+const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || '';
 
 // 住所から国名を削除し、郵便番号を分離
 const parseAddress = (fullAddress: string): { address: string; postalCode: string } => {
@@ -68,6 +69,10 @@ export function PlacePage() {
   const [tabId, setTabId] = useState('frequent');
 
   const [errors, setErrors] = useState<{ name?: string }>({});
+
+  // 音声入力の状態
+  const [isListening, setIsListening] = useState(false);
+  const [isProcessingVoice, setIsProcessingVoice] = useState(false);
 
   useEffect(() => {
     const loadData = async () => {
@@ -196,6 +201,124 @@ export function PlacePage() {
     navigate('/');
   }, [id, navigate, showToast]);
 
+  // Geminiでフィラー除去と文章整形
+  const processWithGemini = useCallback(async (rawText: string): Promise<string> => {
+    if (!GEMINI_API_KEY) {
+      return rawText;
+    }
+
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            contents: [{
+              parts: [{
+                text: `以下の音声入力テキストを整形してください。
+・フィラー（「えーと」「あの」「まあ」「なんか」「そのー」等）を除去
+・句読点を適切に追加
+・文章として自然な形に整形
+・内容は変えずに、読みやすく整える
+・整形後のテキストのみを返してください（説明不要）
+
+音声入力テキスト:
+${rawText}`
+              }]
+            }],
+            generationConfig: {
+              temperature: 0.1,
+              maxOutputTokens: 500,
+            }
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Gemini API request failed');
+      }
+
+      const data = await response.json();
+      const processedText = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+      return processedText || rawText;
+    } catch (error) {
+      console.error('Gemini processing error:', error);
+      return rawText;
+    }
+  }, []);
+
+  // 音声入力
+  const startVoiceInput = useCallback(() => {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      showToast('お使いのブラウザは音声入力に対応していません', 'error');
+      return;
+    }
+
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+
+    recognition.lang = 'ja-JP';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognition.continuous = true; // 長い入力に対応
+
+    recognition.onstart = () => {
+      setIsListening(true);
+    };
+
+    recognition.onresult = async (event: any) => {
+      // 全ての認識結果を結合
+      let fullTranscript = '';
+      for (let i = 0; i < event.results.length; i++) {
+        fullTranscript += event.results[i][0].transcript;
+      }
+
+      setIsListening(false);
+      recognition.stop();
+
+      if (fullTranscript.trim()) {
+        setIsProcessingVoice(true);
+        showToast('音声を整形中...');
+
+        // Geminiでフィラー除去と整形
+        const processedText = await processWithGemini(fullTranscript);
+
+        // 既存のメモに追記（空でない場合は改行を追加）
+        setMemo((prev) => prev ? `${prev}\n${processedText}` : processedText);
+        setIsProcessingVoice(false);
+        showToast('音声入力を追加しました');
+      }
+    };
+
+    recognition.onerror = (event: any) => {
+      console.error('Speech recognition error:', event.error);
+      setIsListening(false);
+      if (event.error === 'not-allowed') {
+        showToast('マイクの使用が許可されていません', 'error');
+      } else if (event.error === 'no-speech') {
+        showToast('音声が検出されませんでした', 'error');
+      } else {
+        showToast('音声認識に失敗しました', 'error');
+      }
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+    };
+
+    recognition.start();
+    showToast('話してください...');
+  }, [showToast, processWithGemini]);
+
+  // 音声入力を停止
+  const stopVoiceInput = useCallback(() => {
+    setIsListening(false);
+    // recognition.stop() は onresult で処理される
+  }, []);
+
   if (isLoading) {
     return (
       <Loading
@@ -258,12 +381,41 @@ export function PlacePage() {
             </div>
           )}
 
-          <Textarea
-            label="メモ（任意）"
-            value={memo}
-            onChange={(e) => setMemo(e.target.value)}
-            placeholder="例: 駐車場は裏手にあり"
-          />
+          <div className="flex flex-col gap-2">
+            <Textarea
+              label="メモ（任意）"
+              value={memo}
+              onChange={(e) => setMemo(e.target.value)}
+              placeholder="例: 駐車場は裏手にあり"
+            />
+            <button
+              type="button"
+              onClick={isListening ? stopVoiceInput : startVoiceInput}
+              disabled={isProcessingVoice}
+              className={`
+                flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium text-sm transition-all
+                ${isListening
+                  ? 'bg-red-500 text-white animate-pulse'
+                  : isProcessingVoice
+                    ? 'bg-gray-200 text-gray-500'
+                    : 'bg-white text-text border border-border hover:bg-gray-50'
+                }
+              `}
+            >
+              <span>{isListening ? '🔴' : isProcessingVoice ? '⏳' : '🎤'}</span>
+              <span>
+                {isListening
+                  ? '録音中...タップで停止'
+                  : isProcessingVoice
+                    ? '整形中...'
+                    : '音声でメモを入力'
+                }
+              </span>
+            </button>
+            {!GEMINI_API_KEY && (
+              <p className="text-xs text-text-secondary">※ Gemini APIキーが未設定のため、整形機能は無効です</p>
+            )}
+          </div>
 
           <div className="flex flex-col gap-2">
             <p className="text-base font-bold text-text">カテゴリ</p>
