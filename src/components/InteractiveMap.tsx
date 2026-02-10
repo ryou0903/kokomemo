@@ -141,11 +141,11 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
     };
 
     const handleAbsoluteOrientation = (event: DeviceOrientationEvent) => {
-      // Android: deviceorientationabsolute gives north-relative heading
+      // Android: deviceorientationabsolute gives compass heading
       absoluteSupported = true;
       if (event.alpha !== null) {
-        // alpha is counterclockwise from north, convert to clockwise
-        setHeading((360 - event.alpha) % 360);
+        // alpha is compass heading: 0=north, 90=east, 180=south, 270=west
+        setHeading(event.alpha);
         setHasOrientationSensor(true);
       }
     };
