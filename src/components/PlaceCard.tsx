@@ -156,13 +156,13 @@ export function PlaceCard({ place, onEdit, onNavigate }: PlaceCardProps) {
                 </div>
               )}
 
-              {/* 座標 */}
-              <div>
-                <p className="text-sm text-text-secondary mb-1">座標</p>
-                <p className="text-sm text-text font-mono">
-                  {place.latitude.toFixed(6)}, {place.longitude.toFixed(6)}
-                </p>
-              </div>
+              {/* 郵便番号 */}
+              {place.postalCode && (
+                <div>
+                  <p className="text-sm text-text-secondary mb-1">郵便番号</p>
+                  <p className="text-base text-text">〒{place.postalCode}</p>
+                </div>
+              )}
 
               {/* メモ */}
               {place.memo && (
