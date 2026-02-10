@@ -22,6 +22,7 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
   const longPressTimerRef = useRef<number | null>(null);
   const watchIdRef = useRef<number | null>(null);
   const animationFrameRef = useRef<number | null>(null);
+  const projectionOverlayRef = useRef<google.maps.OverlayView | null>(null);
   const [isLoadingLocation, setIsLoadingLocation] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
   const isInitializedRef = useRef(false);
@@ -371,6 +372,18 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
       const map = new Map(mapRef.current!, mapOptions);
       mapInstanceRef.current = map;
 
+      // 座標変換用のOverlayViewを作成（回転した地図でも正確な座標変換が可能）
+      class ProjectionOverlay extends google.maps.OverlayView {
+        constructor() {
+          super();
+          this.setMap(map);
+        }
+        onAdd() {}
+        draw() {}
+        onRemove() {}
+      }
+      projectionOverlayRef.current = new ProjectionOverlay();
+
       // マーカーの作成（モードに応じて分岐）
       let marker: MarkerType;
 
@@ -526,17 +539,14 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
         const x = clientX - rect.left;
         const y = clientY - rect.top;
 
-        // Use overlay projection for accurate conversion
-        const bounds = map.getBounds();
-        const ne = bounds?.getNorthEast();
-        const sw = bounds?.getSouthWest();
+        // OverlayViewのプロジェクションを使用（回転・傾斜に対応）
+        const projection = projectionOverlayRef.current?.getProjection();
+        if (projection) {
+          const latLng = projection.fromContainerPixelToLatLng(new google.maps.Point(x, y));
+          if (!latLng) return;
 
-        if (ne && sw) {
-          const mapWidth = rect.width;
-          const mapHeight = rect.height;
-
-          const lng = sw.lng() + (x / mapWidth) * (ne.lng() - sw.lng());
-          const lat = ne.lat() - (y / mapHeight) * (ne.lat() - sw.lat());
+          const lat = latLng.lat();
+          const lng = latLng.lng();
 
           // Move marker without panning
           updateMarkerPosition(marker, { lat, lng });
