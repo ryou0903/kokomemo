@@ -4,6 +4,7 @@ export interface Place {
   memo: string;
   address: string;
   postalCode?: string;
+  phoneNumber?: string;
   latitude: number;
   longitude: number;
   tabId: string;

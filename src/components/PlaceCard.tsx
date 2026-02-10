@@ -164,6 +164,21 @@ export function PlaceCard({ place, onEdit, onNavigate }: PlaceCardProps) {
                 </div>
               )}
 
+              {/* 電話番号 */}
+              {place.phoneNumber && (
+                <div>
+                  <p className="text-sm text-text-secondary mb-1">電話番号</p>
+                  <a
+                    href={`tel:${place.phoneNumber}`}
+                    className="flex items-center gap-2 text-primary text-base"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <span>📞</span>
+                    <span>{place.phoneNumber}</span>
+                  </a>
+                </div>
+              )}
+
               {/* メモ */}
               {place.memo && (
                 <div>

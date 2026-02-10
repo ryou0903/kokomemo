@@ -85,6 +85,7 @@ export function PlacePage() {
           setMemo(place.memo);
           setAddress(place.address);
           setPostalCode(place.postalCode || '');
+          setPhoneNumber(place.phoneNumber || '');
           setLatitude(place.latitude);
           setLongitude(place.longitude);
           setTabId(place.tabId);
@@ -172,6 +173,7 @@ export function PlacePage() {
           memo: memo.trim(),
           address,
           postalCode: postalCode.trim() || undefined,
+          phoneNumber: phoneNumber.trim() || undefined,
           latitude,
           longitude,
           tabId,
@@ -183,6 +185,7 @@ export function PlacePage() {
           memo: memo.trim(),
           address,
           postalCode: postalCode.trim() || undefined,
+          phoneNumber: phoneNumber.trim() || undefined,
           latitude,
           longitude,
           tabId,
