@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
-import { reverseGeocode } from '../lib/maps';
+import { reverseGeocode, getPlaceDetailsRest } from '../lib/maps';
 
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
 
@@ -427,6 +427,48 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
       }
 
       markerRef.current = marker;
+
+      // POI（店舗アイコン）クリックを捕捉してカスタムモーダルを表示
+      map.addListener('click', async (event: google.maps.MapMouseEvent) => {
+        // placeIdがある場合はPOIがクリックされた
+        const placeId = (event as any).placeId;
+        if (placeId && onLocationChangeRef.current) {
+          // デフォルトの情報ウィンドウを抑制
+          event.stop?.();
+
+          const lat = event.latLng?.lat();
+          const lng = event.latLng?.lng();
+          if (lat === undefined || lng === undefined) return;
+
+          // マーカーをその位置に移動
+          updateMarkerPosition(marker, { lat, lng });
+
+          setIsLoadingLocation(true);
+          try {
+            // Place詳細を取得（電話番号含む）
+            const placeDetails = await getPlaceDetailsRest(placeId, GOOGLE_MAPS_API_KEY);
+            if (placeDetails) {
+              onLocationChangeRef.current(
+                placeDetails.latitude,
+                placeDetails.longitude,
+                placeDetails.address,
+                placeDetails.name,
+                placeDetails.postalCode,
+                placeDetails.phoneNumber
+              );
+            } else {
+              // 詳細取得に失敗した場合はreverseGeocodeにフォールバック
+              const result = await reverseGeocode(lat, lng, GOOGLE_MAPS_API_KEY);
+              onLocationChangeRef.current(lat, lng, result.address, result.placeName, result.postalCode, result.phoneNumber);
+            }
+          } catch (error) {
+            console.error('POI click error:', error);
+            onLocationChangeRef.current(lat, lng, `${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+          } finally {
+            setIsLoadingLocation(false);
+          }
+        }
+      });
 
       // Handle long press using map click event
       let pressStartPos = { x: 0, y: 0 };
