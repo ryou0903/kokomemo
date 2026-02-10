@@ -35,6 +35,7 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
   const targetLocationRef = useRef<{ lat: number; lng: number } | null>(null);
   const [heading, setHeading] = useState<number | null>(null);
   const [hasOrientationSensor, setHasOrientationSensor] = useState(false);
+  const [mapHeading, setMapHeading] = useState(0);
 
   // Store latest callback in ref to avoid re-initializing map
   const onLocationChangeRef = useRef(onLocationChange);
@@ -372,6 +373,11 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
       const map = new Map(mapRef.current!, mapOptions);
       mapInstanceRef.current = map;
 
+      // 地図の回転を監視
+      map.addListener('heading_changed', () => {
+        setMapHeading(map.getHeading() || 0);
+      });
+
       // 座標変換用のOverlayViewを作成（回転した地図でも正確な座標変換が可能）
       class ProjectionOverlay extends google.maps.OverlayView {
         constructor() {
@@ -654,15 +660,17 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
 
     if (indicator) {
       if (heading !== null && hasOrientationSensor) {
-        // Show indicator and rotate to heading
-        indicator.style.transform = `rotate(${heading}deg)`;
+        // デバイスの向き - 地図の回転 = 画面上での正しい方向
+        const adjustedHeading = (heading - mapHeading + 360) % 360;
+
+        indicator.style.transform = `rotate(${adjustedHeading}deg)`;
         indicator.style.opacity = '1';
       } else {
         // Hide indicator when no heading data
         indicator.style.opacity = '0';
       }
     }
-  }, [heading, hasOrientationSensor]);
+  }, [heading, hasOrientationSensor, mapHeading]);
 
   // Pan map to new position when it changes significantly (initial location load)
   useEffect(() => {
