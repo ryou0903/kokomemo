@@ -35,6 +35,7 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
   const targetLocationRef = useRef<{ lat: number; lng: number } | null>(null);
   const [heading, setHeading] = useState<number | null>(null);
   const [hasOrientationSensor, setHasOrientationSensor] = useState(false);
+  const [mapHeading, setMapHeading] = useState(0);
 
   // Store latest callback in ref to avoid re-initializing map
   const onLocationChangeRef = useRef(onLocationChange);
@@ -375,6 +376,12 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
       const map = new Map(mapRef.current!, mapOptions);
       mapInstanceRef.current = map;
 
+      // 地図の回転を監視（リアルタイムで更新）
+      map.addListener('heading_changed', () => {
+        const newHeading = map.getHeading() || 0;
+        setMapHeading(newHeading);
+      });
+
       // 座標変換用のOverlayViewを作成（回転した地図でも正確な座標変換が可能）
       class ProjectionOverlay extends google.maps.OverlayView {
         constructor() {
@@ -657,17 +664,23 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
 
     if (indicator) {
       if (heading !== null && hasOrientationSensor) {
-        // AdvancedMarkerのコンテンツは地図と一緒に回転するため、
-        // デバイスの向き（heading）をそのまま使用する
-        // heading: 0=北, 90=東, 180=南, 270=西（時計回り）
-        indicator.style.transform = `rotate(${heading}deg)`;
+        // heading: デバイスのコンパス方位（0=北, 90=東, 180=南, 270=西）
+        // mapHeading: 地図の回転角度（0=北が上, 90=東が上）
+        //
+        // ビームは画面上で「ユーザーが向いている方向」を指す必要がある
+        // 地図が回転すると、同じコンパス方位でも画面上の位置が変わる
+        // 例: 北を向いている(heading=0)時、地図が東向き(mapHeading=90)なら
+        //     ビームは画面の左(270度)を指すべき
+        const visualRotation = ((heading - mapHeading) % 360 + 360) % 360;
+
+        indicator.style.transform = `rotate(${visualRotation}deg)`;
         indicator.style.opacity = '1';
       } else {
         // Hide indicator when no heading data
         indicator.style.opacity = '0';
       }
     }
-  }, [heading, hasOrientationSensor]);
+  }, [heading, hasOrientationSensor, mapHeading]);
 
   // Pan map to new position when it changes significantly (initial location load)
   useEffect(() => {
