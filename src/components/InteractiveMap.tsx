@@ -35,7 +35,6 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
   const targetLocationRef = useRef<{ lat: number; lng: number } | null>(null);
   const [heading, setHeading] = useState<number | null>(null);
   const [hasOrientationSensor, setHasOrientationSensor] = useState(false);
-  const [mapHeading, setMapHeading] = useState(0);
 
   // Store latest callback in ref to avoid re-initializing map
   const onLocationChangeRef = useRef(onLocationChange);
@@ -144,8 +143,11 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
       // Android: deviceorientationabsolute gives compass heading
       absoluteSupported = true;
       if (event.alpha !== null) {
-        // alpha is compass heading: 0=north, 90=east, 180=south, 270=west
-        setHeading(event.alpha);
+        // alpha: 0〜360度
+        // Androidではalphaは反時計回り（北から西方向に増加）で報告される端末が多い
+        // 時計回り（北から東方向に増加）に変換: 360 - alpha
+        const compassHeading = (360 - event.alpha) % 360;
+        setHeading(compassHeading);
         setHasOrientationSensor(true);
       }
     };
@@ -372,11 +374,6 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
 
       const map = new Map(mapRef.current!, mapOptions);
       mapInstanceRef.current = map;
-
-      // 地図の回転を監視
-      map.addListener('heading_changed', () => {
-        setMapHeading(map.getHeading() || 0);
-      });
 
       // 座標変換用のOverlayViewを作成（回転した地図でも正確な座標変換が可能）
       class ProjectionOverlay extends google.maps.OverlayView {
@@ -660,17 +657,17 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
 
     if (indicator) {
       if (heading !== null && hasOrientationSensor) {
-        // デバイスの向き - 地図の回転 = 画面上での正しい方向
-        const adjustedHeading = (heading - mapHeading + 360) % 360;
-
-        indicator.style.transform = `rotate(${adjustedHeading}deg)`;
+        // AdvancedMarkerのコンテンツは地図と一緒に回転するため、
+        // デバイスの向き（heading）をそのまま使用する
+        // heading: 0=北, 90=東, 180=南, 270=西（時計回り）
+        indicator.style.transform = `rotate(${heading}deg)`;
         indicator.style.opacity = '1';
       } else {
         // Hide indicator when no heading data
         indicator.style.opacity = '0';
       }
     }
-  }, [heading, hasOrientationSensor, mapHeading]);
+  }, [heading, hasOrientationSensor]);
 
   // Pan map to new position when it changes significantly (initial location load)
   useEffect(() => {
