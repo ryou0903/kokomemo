@@ -3,6 +3,7 @@ export interface Place {
   name: string;
   memo: string;
   address: string;
+  postalCode?: string;
   latitude: number;
   longitude: number;
   tabId: string;
