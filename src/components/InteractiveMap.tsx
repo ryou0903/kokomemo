@@ -310,53 +310,47 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
       let useAdvancedMarker = false;
       let AdvancedMarkerElement: typeof google.maps.marker.AdvancedMarkerElement | null = null;
 
-      // レガシーモードを強制（Map ID/ベクターマップなしで動作確認）
-      // Chrome認証エラーの原因調査のため一時的に有効化
-      const FORCE_LEGACY_MODE = true;
+      try {
+        const markerLib = await google.maps.importLibrary('marker') as google.maps.MarkerLibrary;
+        if (markerLib && markerLib.AdvancedMarkerElement) {
+          // クラスが存在しても実際に動くかテスト用マップで確認
+          const testDiv = document.createElement('div');
+          testDiv.style.cssText = 'position:absolute;width:1px;height:1px;left:-9999px;';
+          document.body.appendChild(testDiv);
 
-      if (!FORCE_LEGACY_MODE) {
-        try {
-          const markerLib = await google.maps.importLibrary('marker') as google.maps.MarkerLibrary;
-          if (markerLib && markerLib.AdvancedMarkerElement) {
-            // クラスが存在しても実際に動くかテスト用マップで確認
-            const testDiv = document.createElement('div');
-            testDiv.style.cssText = 'position:absolute;width:1px;height:1px;left:-9999px;';
-            document.body.appendChild(testDiv);
+          try {
+            // テスト用のマップを作成（mapIdなし = ラスターマップ）
+            const testMap = new Map(testDiv, {
+              center: { lat: 0, lng: 0 },
+              zoom: 1,
+              disableDefaultUI: true,
+            });
 
-            try {
-              // テスト用のマップを作成（mapIdなし = ラスターマップ）
-              const testMap = new Map(testDiv, {
-                center: { lat: 0, lng: 0 },
-                zoom: 1,
-                disableDefaultUI: true,
-              });
+            // 実際にAdvancedMarkerElementをインスタンス化してみる
+            const testMarker = new markerLib.AdvancedMarkerElement({
+              map: testMap,
+              position: { lat: 0, lng: 0 },
+            });
 
-              // 実際にAdvancedMarkerElementをインスタンス化してみる
-              const testMarker = new markerLib.AdvancedMarkerElement({
-                map: testMap,
-                position: { lat: 0, lng: 0 },
-              });
+            // 成功したらクリーンアップ
+            testMarker.map = null;
+            document.body.removeChild(testDiv);
 
-              // 成功したらクリーンアップ
-              testMarker.map = null;
-              document.body.removeChild(testDiv);
-
-              AdvancedMarkerElement = markerLib.AdvancedMarkerElement;
-              useAdvancedMarker = true;
-              console.log('AdvancedMarkerElement: 利用可能');
-            } catch (testError) {
-              // インスタンス化に失敗
-              document.body.removeChild(testDiv);
-              console.warn('AdvancedMarkerElement: インスタンス化に失敗、レガシーモードを使用:', testError);
-              useAdvancedMarker = false;
-            }
-          } else {
-            console.log('AdvancedMarkerElement: クラスが見つかりません、レガシーモードを使用');
+            AdvancedMarkerElement = markerLib.AdvancedMarkerElement;
+            useAdvancedMarker = true;
+            console.log('AdvancedMarkerElement: 利用可能');
+          } catch (testError) {
+            // インスタンス化に失敗
+            document.body.removeChild(testDiv);
+            console.warn('AdvancedMarkerElement: インスタンス化に失敗、レガシーモードを使用:', testError);
+            useAdvancedMarker = false;
           }
-        } catch (error) {
-          console.warn('マーカーライブラリの読み込みに失敗、レガシーモードを使用:', error);
-          useAdvancedMarker = false;
+        } else {
+          console.log('AdvancedMarkerElement: クラスが見つかりません、レガシーモードを使用');
         }
+      } catch (error) {
+        console.warn('マーカーライブラリの読み込みに失敗、レガシーモードを使用:', error);
+        useAdvancedMarker = false;
       }
 
       isLegacyModeRef.current = !useAdvancedMarker;
