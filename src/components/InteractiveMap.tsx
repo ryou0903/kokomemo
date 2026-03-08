@@ -303,7 +303,11 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
     isInitializedRef.current = true;
 
     const initMap = async () => {
+      console.log('[Map] 初期化開始');
+
       const { Map } = await google.maps.importLibrary('maps') as google.maps.MapsLibrary;
+      console.log('[Map] Maps library loaded');
+
       const initialPos = initialPositionRef.current;
 
       // AdvancedMarkerElementが利用可能かチェック（実際にインスタンス化して確認）
@@ -372,6 +376,29 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
 
       const map = new Map(mapRef.current!, mapOptions);
       mapInstanceRef.current = map;
+      console.log('[Map] Map instance created', { mapId: mapOptions.mapId || 'none (raster)' });
+
+      // タイル読み込みのタイムアウト検出
+      let tilesLoaded = false;
+      const tileTimeout = setTimeout(() => {
+        if (!tilesLoaded) {
+          console.warn('[Map] Tile loading timeout - map may not be rendering correctly');
+          setMapError('地図タイルの読み込みに時間がかかっています。ブラウザのキャッシュをクリアするか、シークレットモードをお試しください。');
+        }
+      }, 10000);
+
+      map.addListener('tilesloaded', () => {
+        if (!tilesLoaded) {
+          tilesLoaded = true;
+          clearTimeout(tileTimeout);
+          console.log('[Map] Tiles loaded successfully');
+        }
+      });
+
+      // アイドル状態を検出（初期化完了の指標）
+      google.maps.event.addListenerOnce(map, 'idle', () => {
+        console.log('[Map] Map is idle (初期化完了)');
+      });
 
       // 地図の回転を監視（リアルタイムで更新）
       map.addListener('heading_changed', () => {
@@ -594,6 +621,15 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
       setMapError('地図の読み込みに失敗しました。ページを再読み込みしてください。');
     });
 
+    // WebGLコンテキスト喪失を検出
+    const canvas = mapRef.current?.querySelector('canvas');
+    if (canvas) {
+      canvas.addEventListener('webglcontextlost', (e) => {
+        console.error('WebGL context lost:', e);
+        setMapError('地図の描画に問題が発生しました。ブラウザのキャッシュをクリアしてください。');
+      });
+    }
+
     return () => {
       if (longPressTimerRef.current) {
         clearTimeout(longPressTimerRef.current);
@@ -723,13 +759,19 @@ export function InteractiveMap({ latitude, longitude, onLocationChange, isLoaded
   if (mapError) {
     return (
       <div className="w-full h-full flex flex-col items-center justify-center bg-gray-200 text-text-secondary p-4 text-center">
-        <p className="text-lg mb-4">{mapError}</p>
-        <button
-          onClick={() => window.location.reload()}
-          className="px-4 py-2 bg-primary text-white rounded-lg"
-        >
-          再読み込み
-        </button>
+        <p className="text-base mb-2 font-medium text-text">地図の表示に問題があります</p>
+        <p className="text-sm mb-4">{mapError}</p>
+        <div className="flex flex-col gap-2 w-full max-w-xs">
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-primary text-white rounded-lg"
+          >
+            再読み込み
+          </button>
+          <p className="text-xs text-text-secondary mt-2">
+            解決しない場合は、Chromeの設定 &gt; プライバシーとセキュリティ &gt; 閲覧データの削除 から「キャッシュ」を削除してください。
+          </p>
+        </div>
       </div>
     );
   }
