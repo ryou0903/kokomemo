@@ -36,19 +36,51 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        // アプリ更新時に古いキャッシュを自動削除
+        cleanupOutdatedCaches: true,
+        // 古いService Workerのキャッシュもクリア
+        skipWaiting: true,
+        clientsClaim: true,
         runtimeCaching: [
           {
-            urlPattern: /^https:\/\/maps\.googleapis\.com\/.*/i,
-            handler: 'CacheFirst',
+            // Google Maps JavaScript API - NetworkFirstで常に最新を優先
+            urlPattern: /^https:\/\/maps\.googleapis\.com\/maps\/api\/js/i,
+            handler: 'NetworkFirst',
             options: {
-              cacheName: 'google-maps-cache',
+              cacheName: 'google-maps-api',
               expiration: {
-                maxEntries: 50,
-                maxAgeSeconds: 60 * 60 * 24 * 7, // 1 week
+                maxEntries: 10,
+                maxAgeSeconds: 60 * 60 * 24, // 1日
+              },
+              networkTimeoutSeconds: 10,
+            },
+          },
+          {
+            // Google Maps タイル - StaleWhileRevalidateで高速表示しつつ更新
+            urlPattern: /^https:\/\/maps\.(googleapis|gstatic)\.com\/.*/i,
+            handler: 'StaleWhileRevalidate',
+            options: {
+              cacheName: 'google-maps-tiles',
+              expiration: {
+                maxEntries: 100,
+                maxAgeSeconds: 60 * 60 * 24 * 3, // 3日に短縮
               },
               cacheableResponse: {
                 statuses: [0, 200],
               },
+            },
+          },
+          {
+            // Places API (REST) - NetworkFirst
+            urlPattern: /^https:\/\/places\.googleapis\.com\/.*/i,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'google-places-api',
+              expiration: {
+                maxEntries: 50,
+                maxAgeSeconds: 60 * 60, // 1時間
+              },
+              networkTimeoutSeconds: 5,
             },
           },
         ],
